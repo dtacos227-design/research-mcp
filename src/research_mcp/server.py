@@ -7,7 +7,9 @@ from research_mcp.config import configure_logging, get_settings
 from research_mcp.db import repository
 from research_mcp.db.database import get_connection
 from research_mcp.providers.aggregator import search_all
+from research_mcp.providers.crossref import get_bibtex, get_by_doi
 from research_mcp.providers.semantic_scholar import get_citations, get_references
+from research_mcp.providers.unpaywall import get_oa_location
 
 mcp = MCPServer("research-mcp")
 
@@ -94,6 +96,31 @@ async def get_citation_graph(
     except Exception as exc:
         raise ToolError(f"Could not fetch {direction} for {identifier!r}: {exc}") from exc
     return [r.model_dump() for r in results]
+
+
+@mcp.tool()
+async def resolve_doi(doi: str) -> dict:
+    """Resolve a DOI to official Crossref metadata, BibTeX and legal open-access PDF info."""
+    metadata = await get_by_doi(doi)
+    if metadata is None:
+        raise ToolError(f"Crossref has no record for DOI {doi!r}. Check the DOI for typos.")
+    bibtex = await get_bibtex(doi)
+    try:
+        oa = await get_oa_location(doi, get_settings().email)
+    except Exception:
+        oa = None
+    return {
+        "doi": metadata.doi,
+        "title": metadata.title,
+        "authors": metadata.authors,
+        "year": metadata.year,
+        "venue": metadata.venue,
+        "citation_count": metadata.citation_count,
+        "bibtex": bibtex,
+        "is_oa": oa.is_oa if oa else False,
+        "pdf_url": oa.pdf_url if oa else None,
+        "landing_page_url": oa.landing_page_url if oa else None,
+    }
 
 
 def main() -> None:
