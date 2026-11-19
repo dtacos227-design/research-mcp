@@ -1,3 +1,5 @@
+from typing import Literal
+
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
@@ -5,6 +7,7 @@ from research_mcp.config import configure_logging, get_settings
 from research_mcp.db import repository
 from research_mcp.db.database import get_connection
 from research_mcp.providers.aggregator import search_all
+from research_mcp.providers.semantic_scholar import get_citations, get_references
 
 mcp = MCPServer("research-mcp")
 
@@ -75,6 +78,22 @@ async def search_papers(
             item["abstract"] = item["abstract"][:300] + "..."
         results.append(item)
     return {"results": results, "errors": outcome.errors}
+
+
+@mcp.tool()
+async def get_citation_graph(
+    identifier: str,
+    direction: Literal["references", "citations"] = "citations",
+    limit: int = 15,
+) -> list[dict]:
+    """Trace a paper's citations or references via Semantic Scholar (identifier is a DOI)."""
+    s2_id = identifier if identifier.upper().startswith(("DOI:", "ARXIV:")) else f"DOI:{identifier}"
+    fn = get_references if direction == "references" else get_citations
+    try:
+        results = await fn(s2_id, limit)
+    except Exception as exc:
+        raise ToolError(f"Could not fetch {direction} for {identifier!r}: {exc}") from exc
+    return [r.model_dump() for r in results]
 
 
 def main() -> None:
