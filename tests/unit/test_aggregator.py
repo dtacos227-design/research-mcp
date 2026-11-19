@@ -77,7 +77,34 @@ async def test_truncates_merged_results_to_limit():
         )
         outcome = await search_all("x", ["openalex"], None, None, 2)
     assert len(outcome.results) == 2
-    assert [r.citation_count for r in outcome.results] == [4, 3]
+    assert [r.external_id for r in outcome.results] == ["0", "1"]
+
+
+@pytest.mark.asyncio
+async def test_truncation_keeps_zero_citation_provider_represented():
+    with (
+        patch("research_mcp.providers.aggregator.OPENALEX") as openalex,
+        patch("research_mcp.providers.aggregator.ARXIV") as arxiv,
+    ):
+        openalex.search = AsyncMock(
+            return_value=[
+                _result(external_id=str(i), doi=f"10.1/{i}", citation_count=1000 - i)
+                for i in range(3)
+            ]
+        )
+        arxiv.search = AsyncMock(
+            return_value=[
+                _result(
+                    source_provider="arxiv",
+                    external_id="a1",
+                    doi=None,
+                    title="Arxiv Only",
+                    citation_count=0,
+                )
+            ]
+        )
+        outcome = await search_all("x", ["openalex", "arxiv"], None, None, 2)
+    assert [r.source_provider for r in outcome.results] == ["openalex", "arxiv"]
 
 
 @pytest.mark.asyncio

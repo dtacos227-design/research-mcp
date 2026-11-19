@@ -48,6 +48,21 @@ def _is_duplicate(result: SearchResult, kept: list[SearchResult]) -> bool:
     return False
 
 
+def _interleave(sources: list[str], results: list[SearchResult]) -> list[SearchResult]:
+    # Round-robin by provider so providers that report no citation counts (arXiv,
+    # PubMed) are not starved by truncation; each provider's own ranking is kept.
+    buckets: dict[str, list[SearchResult]] = {}
+    for r in results:
+        buckets.setdefault(r.source_provider, []).append(r)
+    interleaved: list[SearchResult] = []
+    while any(buckets.values()):
+        for name in sources:
+            bucket = buckets.get(name)
+            if bucket:
+                interleaved.append(bucket.pop(0))
+    return interleaved
+
+
 async def search_all(
     query: str,
     sources: list[str],
@@ -72,5 +87,4 @@ async def search_all(
             if not _is_duplicate(result, merged):
                 merged.append(result)
 
-    merged.sort(key=lambda r: r.citation_count, reverse=True)
-    return AggregatedSearch(results=merged[:limit], errors=errors)
+    return AggregatedSearch(results=_interleave(sources, merged)[:limit], errors=errors)
