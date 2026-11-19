@@ -1,3 +1,4 @@
+import json
 import sys
 
 import anyio
@@ -25,11 +26,28 @@ async def test_create_list_and_get_status_round_trip(tmp_path, monkeypatch):
 
                 created = await session.call_tool("create_project", {"name": "Integration Test"})
                 assert created.is_error is False
+                project = json.loads(created.content[0].text)
+                assert project["name"] == "Integration Test"
 
                 listed = await session.call_tool("list_projects", {})
                 assert listed.is_error is False
 
                 status = await session.call_tool(
+                    "get_project_status", {"project_id": project["id"]}
+                )
+                assert status.is_error is False
+                body = json.loads(status.content[0].text)
+                assert body["id"] == project["id"]
+                assert body["slug"] == project["slug"]
+                assert body["name"] == "Integration Test"
+                assert body["workspace_path"].endswith(project["slug"])
+                assert body["citekeys"] == []
+                assert body["draft_filenames"] == []
+                assert body["chart_filenames"] == []
+                assert body["export_filenames"] == []
+
+                missing = await session.call_tool(
                     "get_project_status", {"project_id": "nonexistent"}
                 )
-                assert status.is_error is True
+                assert missing.is_error is True
+                assert "nonexistent" in missing.content[0].text
