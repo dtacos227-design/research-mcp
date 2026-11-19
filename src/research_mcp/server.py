@@ -121,11 +121,13 @@ async def resolve_doi(doi: str) -> dict:
             bibtex = await get_bibtex(doi)
         except Exception:
             bibtex = None
+        oa_lookup_error: str | None = None
         try:
             oa = await get_oa_location(doi, get_settings().email)
-        except Exception:
+        except Exception as exc:
             oa = None
-        return {
+            oa_lookup_error = str(exc) or repr(exc)
+        response: dict = {
             "doi": metadata.doi,
             "title": metadata.title,
             "authors": metadata.authors,
@@ -133,10 +135,14 @@ async def resolve_doi(doi: str) -> dict:
             "venue": metadata.venue,
             "citation_count": metadata.citation_count,
             "bibtex": bibtex,
-            "is_oa": oa.is_oa if oa else False,
+            # None means "could not check" (see oa_lookup_error); False means checked, closed.
+            "is_oa": None if oa_lookup_error else (oa.is_oa if oa else False),
             "pdf_url": oa.pdf_url if oa else None,
             "landing_page_url": oa.landing_page_url if oa else None,
         }
+        if oa_lookup_error:
+            response["oa_lookup_error"] = oa_lookup_error
+        return response
     except ToolError:
         raise
     except Exception as exc:

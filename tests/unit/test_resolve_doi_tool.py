@@ -58,8 +58,9 @@ async def test_resolve_doi_degrades_gracefully_when_unpaywall_fails():
         patch("research_mcp.server.get_oa_location", AsyncMock(side_effect=RuntimeError("down"))),
     ):
         result = await resolve_doi("10.1/x")
-    assert result["is_oa"] is False
+    assert result["is_oa"] is None
     assert result["pdf_url"] is None
+    assert "oa_lookup_error" in result
 
 
 @pytest.mark.asyncio
