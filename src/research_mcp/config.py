@@ -15,12 +15,16 @@ class Settings(BaseSettings):
         default_factory=lambda: Path.home() / ".research-mcp" / "workspaces",
         validation_alias="RESEARCH_MCP_WORKSPACE",
     )
+    db_path: Path = Field(
+        default_factory=lambda: Path.home() / ".research-mcp" / "research_mcp.db",
+        validation_alias="RESEARCH_MCP_DB_PATH",
+    )
     email: str | None = Field(default=None, validation_alias="RESEARCH_MCP_EMAIL")
     log_level: str = Field(default="INFO", validation_alias="RESEARCH_MCP_LOG_LEVEL")
 
-    @field_validator("workspace_dir", mode="after")
+    @field_validator("workspace_dir", "db_path", mode="after")
     @classmethod
-    def _resolve_workspace_dir(cls, value: Path) -> Path:
+    def _resolve_paths(cls, value: Path) -> Path:
         return value.expanduser().resolve()
 
 
