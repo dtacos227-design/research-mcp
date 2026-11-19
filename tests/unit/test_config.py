@@ -31,6 +31,14 @@ def test_email_read_from_env(monkeypatch):
     assert settings.email == "rezalkaryanto@gmail.com"
 
 
+def test_email_read_from_dotenv_file(monkeypatch, tmp_path):
+    monkeypatch.delenv("RESEARCH_MCP_EMAIL", raising=False)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("RESEARCH_MCP_EMAIL=from-dotenv@example.com\n")
+    settings = Settings()
+    assert settings.email == "from-dotenv@example.com"
+
+
 def test_log_level_defaults_to_info(monkeypatch):
     monkeypatch.delenv("RESEARCH_MCP_LOG_LEVEL", raising=False)
     settings = Settings()

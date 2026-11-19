@@ -7,7 +7,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(validate_default=True)
+    model_config = SettingsConfigDict(
+        validate_default=True, env_file=".env", env_file_encoding="utf-8"
+    )
 
     workspace_dir: Path = Field(
         default_factory=lambda: Path.home() / ".research-mcp" / "workspaces",
