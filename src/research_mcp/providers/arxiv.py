@@ -4,7 +4,7 @@ import httpx
 
 from research_mcp.providers.base import LiteratureProvider, SearchResult, request_with_retry
 
-ARXIV_API_URL = "http://export.arxiv.org/api/query"
+ARXIV_API_URL = "https://export.arxiv.org/api/query"
 NS = {"atom": "http://www.w3.org/2005/Atom"}
 
 
@@ -56,7 +56,7 @@ class ArxivProvider(LiteratureProvider):
             "max_results": limit,
         }
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
             response = await request_with_retry(client, "GET", ARXIV_API_URL, params=params)
         root = ET.fromstring(response.text)
         return [_to_result(entry) for entry in root.findall("atom:entry", NS)]

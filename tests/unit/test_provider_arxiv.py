@@ -21,7 +21,7 @@ FIXTURE = """<?xml version='1.0' encoding='UTF-8'?>
 @pytest.mark.asyncio
 @respx.mock
 async def test_search_parses_atom_entries():
-    respx.get("http://export.arxiv.org/api/query").mock(
+    respx.get("https://export.arxiv.org/api/query").mock(
         return_value=httpx.Response(
             200, content=FIXTURE, headers={"content-type": "application/atom+xml"}
         )
@@ -40,7 +40,7 @@ async def test_search_parses_atom_entries():
 @pytest.mark.asyncio
 @respx.mock
 async def test_search_returns_empty_list_for_no_entries():
-    respx.get("http://export.arxiv.org/api/query").mock(
+    respx.get("https://export.arxiv.org/api/query").mock(
         return_value=httpx.Response(
             200,
             content='<feed xmlns="http://www.w3.org/2005/Atom"></feed>',
