@@ -1,0 +1,39 @@
+[project]
+name = "research-mcp"
+version = "0.1.0"
+description = "Research MCP: 100% free end-to-end scientific research MCP server"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=2.3.0",
+    "httpx>=0.28",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "tenacity>=9.0",
+    "aiosqlite>=0.20",
+]
+
+[project.scripts]
+research-mcp = "research_mcp.server:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "anyio>=4.6",
+    "respx>=0.21",
+    "ruff>=0.7",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.9,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
