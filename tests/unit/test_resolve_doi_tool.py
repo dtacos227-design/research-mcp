@@ -60,3 +60,22 @@ async def test_resolve_doi_degrades_gracefully_when_unpaywall_fails():
         result = await resolve_doi("10.1/x")
     assert result["is_oa"] is False
     assert result["pdf_url"] is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_doi_wraps_unexpected_errors_in_tool_error():
+    with patch("research_mcp.server.get_by_doi", AsyncMock(side_effect=RuntimeError("timeout"))):
+        with pytest.raises(ToolError, match="RuntimeError: timeout"):
+            await resolve_doi("10.1/x")
+
+
+@pytest.mark.asyncio
+async def test_resolve_doi_keeps_metadata_when_bibtex_fails():
+    with (
+        patch("research_mcp.server.get_by_doi", AsyncMock(return_value=_crossref_result())),
+        patch("research_mcp.server.get_bibtex", AsyncMock(side_effect=RuntimeError("down"))),
+        patch("research_mcp.server.get_oa_location", AsyncMock(return_value=None)),
+    ):
+        result = await resolve_doi("10.1/x")
+    assert result["title"] == "T"
+    assert result["bibtex"] is None

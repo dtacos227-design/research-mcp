@@ -17,23 +17,35 @@ mcp = MCPServer("research-mcp")
 @mcp.tool()
 async def create_project(name: str, description: str = "") -> dict:
     """Create a research project and its isolated workspace directories."""
-    settings = get_settings()
-    conn = await get_connection(settings.db_path)
     try:
-        project = await repository.create_project(conn, settings.workspace_dir, name, description)
-        return project.model_dump()
-    finally:
-        await conn.close()
+        settings = get_settings()
+        conn = await get_connection(settings.db_path)
+        try:
+            project = await repository.create_project(
+                conn, settings.workspace_dir, name, description
+            )
+            return project.model_dump()
+        finally:
+            await conn.close()
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(f"{type(exc).__name__}: {exc}") from exc
 
 
 @mcp.tool()
 async def list_projects() -> list[dict]:
     """List all projects with their paper and draft section counts."""
-    conn = await get_connection(get_settings().db_path)
     try:
-        return await repository.list_projects(conn)
-    finally:
-        await conn.close()
+        conn = await get_connection(get_settings().db_path)
+        try:
+            return await repository.list_projects(conn)
+        finally:
+            await conn.close()
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(f"{type(exc).__name__}: {exc}") from exc
 
 
 @mcp.tool()
@@ -101,26 +113,34 @@ async def get_citation_graph(
 @mcp.tool()
 async def resolve_doi(doi: str) -> dict:
     """Resolve a DOI to official Crossref metadata, BibTeX and legal open-access PDF info."""
-    metadata = await get_by_doi(doi)
-    if metadata is None:
-        raise ToolError(f"Crossref has no record for DOI {doi!r}. Check the DOI for typos.")
-    bibtex = await get_bibtex(doi)
     try:
-        oa = await get_oa_location(doi, get_settings().email)
-    except Exception:
-        oa = None
-    return {
-        "doi": metadata.doi,
-        "title": metadata.title,
-        "authors": metadata.authors,
-        "year": metadata.year,
-        "venue": metadata.venue,
-        "citation_count": metadata.citation_count,
-        "bibtex": bibtex,
-        "is_oa": oa.is_oa if oa else False,
-        "pdf_url": oa.pdf_url if oa else None,
-        "landing_page_url": oa.landing_page_url if oa else None,
-    }
+        metadata = await get_by_doi(doi)
+        if metadata is None:
+            raise ToolError(f"Crossref has no record for DOI {doi!r}. Check the DOI for typos.")
+        try:
+            bibtex = await get_bibtex(doi)
+        except Exception:
+            bibtex = None
+        try:
+            oa = await get_oa_location(doi, get_settings().email)
+        except Exception:
+            oa = None
+        return {
+            "doi": metadata.doi,
+            "title": metadata.title,
+            "authors": metadata.authors,
+            "year": metadata.year,
+            "venue": metadata.venue,
+            "citation_count": metadata.citation_count,
+            "bibtex": bibtex,
+            "is_oa": oa.is_oa if oa else False,
+            "pdf_url": oa.pdf_url if oa else None,
+            "landing_page_url": oa.landing_page_url if oa else None,
+        }
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(f"{type(exc).__name__}: {exc}") from exc
 
 
 def main() -> None:
