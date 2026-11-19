@@ -37,6 +37,12 @@ def _normalize_s2_identifier(identifier: str) -> str:
     return f"DOI:{identifier}"  # last-resort fallback, preserves old default behavior
 
 
+def _truncate_abstract(abstract: str | None) -> str | None:
+    if abstract and len(abstract) > 300:
+        return abstract[:300] + "..."
+    return abstract
+
+
 @mcp.tool()
 async def create_project(name: str, description: str = "") -> dict:
     """Create a research project and its isolated workspace directories."""
@@ -111,8 +117,7 @@ async def search_papers(
     results = []
     for r in outcome.results:
         item = r.model_dump()
-        if item["abstract"] and len(item["abstract"]) > 300:
-            item["abstract"] = item["abstract"][:300] + "..."
+        item["abstract"] = _truncate_abstract(item["abstract"])
         results.append(item)
     return {"results": results, "errors": outcome.errors}
 

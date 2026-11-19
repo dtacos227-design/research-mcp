@@ -42,3 +42,6 @@ async def test_real_cross_source_search_has_no_duplicate_dois(tmp_path):
     dois = [r["doi"] for r in payload["results"] if r["doi"]]
     assert len(dois) == len(set(dois))
     assert len(payload["results"]) > 0
+    assert len({r["source_provider"] for r in payload["results"]}) >= 2, (
+        f"expected at least 2 providers to respond, got: {payload['errors']}"
+    )
