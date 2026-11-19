@@ -2,7 +2,7 @@ import logging
 import sys
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,17 +15,24 @@ class Settings(BaseSettings):
         default_factory=lambda: Path.home() / ".research-mcp" / "workspaces",
         validation_alias="RESEARCH_MCP_WORKSPACE",
     )
-    db_path: Path = Field(
-        default_factory=lambda: Path.home() / ".research-mcp" / "research_mcp.db",
-        validation_alias="RESEARCH_MCP_DB_PATH",
-    )
+    db_path: Path | None = Field(default=None, validation_alias="RESEARCH_MCP_DB_PATH")
     email: str | None = Field(default=None, validation_alias="RESEARCH_MCP_EMAIL")
     log_level: str = Field(default="INFO", validation_alias="RESEARCH_MCP_LOG_LEVEL")
 
-    @field_validator("workspace_dir", "db_path", mode="after")
+    @field_validator("workspace_dir", mode="after")
     @classmethod
-    def _resolve_paths(cls, value: Path) -> Path:
+    def _resolve_workspace_dir(cls, value: Path) -> Path:
         return value.expanduser().resolve()
+
+    @model_validator(mode="after")
+    def _resolve_db_path(self) -> "Settings":
+        path = (
+            self.db_path
+            if self.db_path is not None
+            else self.workspace_dir.parent / "research_mcp.db"
+        )
+        self.db_path = path.expanduser().resolve()
+        return self
 
 
 def get_settings() -> Settings:

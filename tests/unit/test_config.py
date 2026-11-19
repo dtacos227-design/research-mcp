@@ -19,6 +19,20 @@ def test_workspace_dir_override_from_env_is_resolved_absolute(monkeypatch, tmp_p
     assert settings.workspace_dir == (tmp_path / "relative/workspace").resolve()
 
 
+def test_db_path_follows_a_relocated_workspace_dir(monkeypatch, tmp_path):
+    monkeypatch.setenv("RESEARCH_MCP_WORKSPACE", str(tmp_path / "custom" / "workspaces"))
+    monkeypatch.delenv("RESEARCH_MCP_DB_PATH", raising=False)
+    settings = Settings()
+    assert settings.db_path == (tmp_path / "custom" / "research_mcp.db").resolve()
+
+
+def test_db_path_explicit_override_wins_over_relocated_workspace_dir(monkeypatch, tmp_path):
+    monkeypatch.setenv("RESEARCH_MCP_WORKSPACE", str(tmp_path / "custom" / "workspaces"))
+    monkeypatch.setenv("RESEARCH_MCP_DB_PATH", str(tmp_path / "elsewhere" / "db.sqlite"))
+    settings = Settings()
+    assert settings.db_path == (tmp_path / "elsewhere" / "db.sqlite").resolve()
+
+
 def test_email_defaults_to_none_when_unset(monkeypatch):
     monkeypatch.delenv("RESEARCH_MCP_EMAIL", raising=False)
     settings = Settings()
