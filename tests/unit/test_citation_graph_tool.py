@@ -35,3 +35,20 @@ async def test_references_direction_calls_get_references():
     with patch("research_mcp.server.get_references", AsyncMock(return_value=[_result()])) as mocked:
         await get_citation_graph("10.1038/x", "references", 5)
     mocked.assert_awaited_once_with("DOI:10.1038/x", 5)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("identifier", "expected"),
+    [
+        ("a" * 40, "a" * 40),
+        ("1706.03762v7", "ARXIV:1706.03762"),
+        ("doi:10.1/x", "DOI:10.1/x"),
+        ("https://doi.org/10.1/x", "DOI:10.1/x"),
+        ("10.1038/x", "DOI:10.1038/x"),
+    ],
+)
+async def test_identifier_normalization(identifier, expected):
+    with patch("research_mcp.server.get_citations", AsyncMock(return_value=[])) as mocked:
+        await get_citation_graph(identifier, "citations", 5)
+    mocked.assert_awaited_once_with(expected, 5)

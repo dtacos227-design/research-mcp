@@ -1,3 +1,4 @@
+import re
 from typing import Literal
 
 from mcp.server.mcpserver import MCPServer
@@ -12,6 +13,28 @@ from research_mcp.providers.semantic_scholar import get_citations, get_reference
 from research_mcp.providers.unpaywall import get_oa_location
 
 mcp = MCPServer("research-mcp")
+
+_DOI_RE = re.compile(r"^(?:https?://doi\.org/)?10\.\S+$", re.IGNORECASE)
+_ARXIV_RE = re.compile(r"^\d{4}\.\d{4,5}(v\d+)?$")
+_S2_ID_RE = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
+_KNOWN_PREFIXES = ("DOI:", "ARXIV:", "PMID:", "CORPUSID:", "MAG:", "ACL:", "DBLP:")
+
+
+def _normalize_s2_identifier(identifier: str) -> str:
+    upper = identifier.upper()
+    for prefix in _KNOWN_PREFIXES:
+        if upper.startswith(prefix):
+            return prefix + identifier[len(prefix) :]
+    if _ARXIV_RE.match(identifier):
+        return f"ARXIV:{identifier.split('v')[0]}"
+    if _S2_ID_RE.match(identifier):
+        return identifier
+    if _DOI_RE.match(identifier):
+        doi = (
+            identifier.split("doi.org/", 1)[-1] if "doi.org/" in identifier.lower() else identifier
+        )
+        return f"DOI:{doi}"
+    return f"DOI:{identifier}"  # last-resort fallback, preserves old default behavior
 
 
 @mcp.tool()
@@ -101,7 +124,7 @@ async def get_citation_graph(
     limit: int = 15,
 ) -> list[dict]:
     """Trace a paper's citations or references via Semantic Scholar (identifier is a DOI)."""
-    s2_id = identifier if identifier.upper().startswith(("DOI:", "ARXIV:")) else f"DOI:{identifier}"
+    s2_id = _normalize_s2_identifier(identifier)
     fn = get_references if direction == "references" else get_citations
     try:
         results = await fn(s2_id, limit)
