@@ -4,6 +4,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from research_mcp.config import configure_logging, get_settings
 from research_mcp.db import repository
 from research_mcp.db.database import get_connection
+from research_mcp.providers.aggregator import search_all
 
 mcp = MCPServer("research-mcp")
 
@@ -55,6 +56,25 @@ async def get_project_status(project_id: str) -> dict:
         }
     finally:
         await conn.close()
+
+
+@mcp.tool()
+async def search_papers(
+    query: str,
+    sources: list[str] = ["openalex", "semantic_scholar", "arxiv"],  # noqa: B006
+    year_from: int | None = None,
+    year_to: int | None = None,
+    limit: int = 10,
+) -> dict:
+    """Search multiple literature sources in parallel, deduplicated by DOI/title."""
+    outcome = await search_all(query, sources, year_from, year_to, limit)
+    results = []
+    for r in outcome.results:
+        item = r.model_dump()
+        if item["abstract"] and len(item["abstract"]) > 300:
+            item["abstract"] = item["abstract"][:300] + "..."
+        results.append(item)
+    return {"results": results, "errors": outcome.errors}
 
 
 def main() -> None:
