@@ -1,3 +1,5 @@
+import urllib.parse
+
 import httpx
 
 from research_mcp.config import get_settings
@@ -95,14 +97,16 @@ async def _get_or_none(path: str) -> httpx.Response | None:
 
 
 async def get_by_doi(doi: str) -> SearchResult | None:
-    response = await _get_or_none(doi)
+    response = await _get_or_none(urllib.parse.quote(doi, safe="/"))
     if response is None:
         return None
     return _map_item(response.json()["message"])
 
 
 async def get_bibtex(doi: str) -> str | None:
-    response = await _get_or_none(f"{doi}/transform/application/x-bibtex")
+    response = await _get_or_none(
+        f"{urllib.parse.quote(doi, safe='/')}/transform/application/x-bibtex"
+    )
     if response is None:
         return None
     return response.text

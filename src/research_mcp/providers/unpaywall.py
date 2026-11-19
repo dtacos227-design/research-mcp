@@ -1,3 +1,5 @@
+import urllib.parse
+
 import httpx
 
 from research_mcp.providers.base import UnpaywallResult, polite_headers, request_with_retry
@@ -22,7 +24,7 @@ async def get_oa_location(doi: str, email: str | None) -> UnpaywallResult | None
             response = await request_with_retry(
                 client,
                 "GET",
-                f"{UNPAYWALL_URL}/{doi}",
+                f"{UNPAYWALL_URL}/{urllib.parse.quote(doi, safe='/')}",
                 params=params,
                 headers=polite_headers(email),
             )

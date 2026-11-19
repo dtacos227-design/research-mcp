@@ -56,3 +56,11 @@ async def test_get_bibtex_returns_raw_text():
     ).mock(return_value=httpx.Response(200, text="@article{Piwowar_2007, title={Sharing...} }"))
     bibtex = await get_bibtex("10.1371/journal.pone.0000308")
     assert bibtex.startswith("@article{Piwowar_2007")
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_by_doi_escapes_special_characters_in_path():
+    route = respx.route(host="api.crossref.org").mock(return_value=httpx.Response(404))
+    await get_by_doi("10.1/a#b?c")
+    assert route.calls[-1].request.url.raw_path.startswith(b"/works/10.1/a%23b%3Fc")

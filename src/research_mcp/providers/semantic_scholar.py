@@ -1,3 +1,5 @@
+import urllib.parse
+
 import httpx
 
 from research_mcp.providers.base import (
@@ -41,7 +43,10 @@ async def _get_json(path: str, params: dict[str, str | int]) -> dict:
 async def _graph_lookup(
     paper_id: str, edge: str, wrapper_key: str, limit: int
 ) -> list[SearchResult]:
-    data = await _get_json(f"/paper/{paper_id}/{edge}", {"fields": PAPER_FIELDS, "limit": limit})
+    data = await _get_json(
+        f"/paper/{urllib.parse.quote(paper_id, safe='/')}/{edge}",
+        {"fields": PAPER_FIELDS, "limit": limit},
+    )
     results: list[SearchResult] = []
     for item in data.get("data") or []:
         paper = item.get(wrapper_key)

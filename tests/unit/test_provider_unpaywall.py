@@ -54,3 +54,11 @@ async def test_falls_back_to_oa_locations_when_best_has_no_pdf():
 async def test_returns_none_on_404():
     respx.get("https://api.unpaywall.org/v2/10.unknown").mock(return_value=httpx.Response(404))
     assert await get_oa_location("10.unknown", "a@b.com") is None
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_escapes_special_characters_in_path():
+    route = respx.route(host="api.unpaywall.org").mock(return_value=httpx.Response(404))
+    await get_oa_location("10.1/a#b?c", None)
+    assert route.calls[-1].request.url.raw_path.startswith(b"/v2/10.1/a%23b%3Fc")

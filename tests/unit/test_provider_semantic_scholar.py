@@ -75,3 +75,13 @@ async def test_search_year_range_param_only_when_given():
     assert route.calls.last.request.url.params["year"] == "2020-2022"
     await SEMANTIC_SCHOLAR.search("q", 2020, None, 1)
     assert route.calls.last.request.url.params["year"] == "2020-"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_graph_lookup_escapes_special_characters_in_path():
+    route = respx.route(host="api.semanticscholar.org").mock(
+        return_value=httpx.Response(200, json={"data": []})
+    )
+    await get_citations("DOI:10.1/a#b?c", 5)
+    assert b"/paper/DOI%3A10.1/a%23b%3Fc/citations" in route.calls[-1].request.url.raw_path
