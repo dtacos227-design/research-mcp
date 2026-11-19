@@ -78,3 +78,38 @@ async def test_truncates_merged_results_to_limit():
         outcome = await search_all("x", ["openalex"], None, None, 2)
     assert len(outcome.results) == 2
     assert [r.citation_count for r in outcome.results] == [4, 3]
+
+
+@pytest.mark.asyncio
+async def test_dedups_by_title_when_only_one_side_has_doi_keeping_first_seen():
+    with (
+        patch("research_mcp.providers.aggregator.OPENALEX") as openalex,
+        patch("research_mcp.providers.aggregator.ARXIV") as arxiv,
+    ):
+        openalex.search = AsyncMock(
+            return_value=[_result(source_provider="openalex", doi="10.1/x", title="Same Paper")]
+        )
+        arxiv.search = AsyncMock(
+            return_value=[
+                _result(source_provider="arxiv", doi=None, title="same paper!", external_id="2")
+            ]
+        )
+        outcome = await search_all("same paper", ["openalex", "arxiv"], None, None, 10)
+    assert len(outcome.results) == 1
+    assert outcome.results[0].source_provider == "openalex"
+
+
+@pytest.mark.asyncio
+async def test_keeps_both_when_dois_differ_even_if_titles_match():
+    with (
+        patch("research_mcp.providers.aggregator.OPENALEX") as openalex,
+        patch("research_mcp.providers.aggregator.ARXIV") as arxiv,
+    ):
+        openalex.search = AsyncMock(
+            return_value=[_result(source_provider="openalex", doi="10.1/a")]
+        )
+        arxiv.search = AsyncMock(
+            return_value=[_result(source_provider="arxiv", doi="10.1/b", external_id="2")]
+        )
+        outcome = await search_all("same paper", ["openalex", "arxiv"], None, None, 10)
+    assert len(outcome.results) == 2
