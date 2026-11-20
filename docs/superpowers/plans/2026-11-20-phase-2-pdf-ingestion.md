@@ -150,7 +150,7 @@ Run `uv add "pymupdf4llm>=0.0.17"` to update lock. For remote requests use `http
 - [ ] **Step 4: Run focused tests**
 
 Run: `uv run pytest tests/unit/test_pdf_extractor.py -v`
-Expected: PASS (12 tests).
+Expected: PASS (13 test cases, including 2 redirect-limit cases).
 
 - [ ] **Step 5: Commit**
 

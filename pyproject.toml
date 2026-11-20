@@ -10,6 +10,7 @@ dependencies = [
     "pydantic-settings>=2.6",
     "tenacity>=9.0",
     "aiosqlite>=0.20",
+    "pymupdf4llm>=0.0.17",
 ]
 
 [project.scripts]
@@ -39,3 +40,8 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+    "ignore:builtin type SwigPyPacked has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type SwigPyObject has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type swigvarlink has no __module__ attribute:DeprecationWarning",
+]
