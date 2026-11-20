@@ -22,6 +22,7 @@ from research_mcp.providers.crossref import get_bibtex, get_by_doi
 from research_mcp.providers.semantic_scholar import get_citations, get_references
 from research_mcp.providers.unpaywall import get_oa_location
 from research_mcp.writers import draft_manager
+from research_mcp.writers.chart_runner import run_chart
 
 mcp = MCPServer("research-mcp")
 
@@ -350,6 +351,31 @@ async def read_draft_section(project_id: str, filename: str) -> dict:
     except Exception as exc:
         raise ToolError(
             f"Could not read draft section {filename!r}: {type(exc).__name__}: {exc}"
+        ) from exc
+
+
+@mcp.tool()
+async def generate_chart(
+    project_id: str,
+    filename: str,
+    python_code: str,
+    dpi: int = 300,
+) -> dict:
+    """Run matplotlib/seaborn visualization code and save the figure(s) to assets/."""
+    try:
+        settings = get_settings()
+        conn = await get_connection(settings.db_path)
+        try:
+            project = await repository.get_project(conn, project_id)
+        finally:
+            await conn.close()
+        assets = run_chart(_project_dir(settings, project), filename, python_code, dpi)
+        return {"assets": assets, "dpi": dpi}
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(
+            f"Could not generate chart {filename!r}: {type(exc).__name__}: {exc}"
         ) from exc
 
 
