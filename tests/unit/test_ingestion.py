@@ -190,6 +190,34 @@ async def test_arxiv_identifier_requires_exact_external_id_and_downloads_arxiv_p
 
 
 @pytest.mark.asyncio
+async def test_reingest_without_doi_same_content_reuses_paper(db, monkeypatch: pytest.MonkeyPatch):
+    conn, project, workspace, _ = db
+    found = search_result(
+        source_provider="arxiv",
+        external_id="1706.03762v7",
+        doi=None,
+        title="Attention Is All You Need",
+        pdf_url="https://export.arxiv.org/pdf/1706.03762v7",
+    )
+    monkeypatch.setattr(
+        "research_mcp.parsers.ingestion.search_all",
+        AsyncMock(return_value=AggregatedSearch(results=[found], errors={})),
+    )
+    patch_download(monkeypatch)
+    patch_parser(monkeypatch, "# Introduction\nTransformer text.")
+
+    first = await ingest_remote_paper(conn, project.id, workspace, "1706.03762v7", download=True)
+    second = await ingest_remote_paper(conn, project.id, workspace, "1706.03762v7", download=True)
+    pdf_dir = workspace / project.slug / "pdfs"
+    pdf_files = list(pdf_dir.glob("*.pdf"))
+
+    assert second["id"] == first["id"]
+    assert second["citekey"] == first["citekey"]
+    assert second["pdf_path"] == first["pdf_path"]
+    assert len(pdf_files) == 1
+
+
+@pytest.mark.asyncio
 async def test_unknown_identifier_raises_actionable_ingestion_error(monkeypatch):
     monkeypatch.setattr(
         "research_mcp.parsers.ingestion.get_by_doi",
@@ -358,6 +386,25 @@ async def test_failed_same_content_reingest_keeps_existing_artifacts(
     assert existing_markdown.read_text(encoding="utf-8") == markdown_text
 
 
+@pytest.mark.asyncio
+async def test_local_import_hashes_source_file_only_once(db, monkeypatch: pytest.MonkeyPatch):
+    conn, project, workspace, tmp_path = db
+    source = make_local_pdf(tmp_path / "source" / "hash_once.pdf", metadata={})
+    patch_parser(monkeypatch)
+    calls: list[Path] = []
+    original_hash_file = ingestion._hash_file
+
+    def counting_hash_file(path: Path) -> str:
+        calls.append(path)
+        return original_hash_file(path)
+
+    monkeypatch.setattr(ingestion, "_hash_file", counting_hash_file)
+
+    await ingest_local_pdf(conn, project.id, workspace, source, doi=None)
+
+    assert calls.count(source) == 1
+
+
 def test_hash_file_rejects_oversized_input_before_reading(tmp_path: Path):
     oversized = tmp_path / "oversized.pdf"
     with oversized.open("wb") as stream:
@@ -380,6 +427,29 @@ async def test_repeat_local_import_same_hash_reuses_paper(db, monkeypatch: pytes
     assert second["id"] == first["id"]
     assert second["citekey"] == first["citekey"]
     assert found is not None
+
+
+@pytest.mark.asyncio
+async def test_repeat_local_import_with_doi_reuses_same_path_without_churn(
+    db, monkeypatch: pytest.MonkeyPatch
+):
+    conn, project, workspace, tmp_path = db
+    source = make_local_pdf(tmp_path / "source" / "doi_repeat.pdf", metadata={})
+    monkeypatch.setattr(
+        "research_mcp.parsers.ingestion.get_by_doi",
+        AsyncMock(return_value=search_result(doi="10.1/repeat")),
+    )
+    patch_parser(monkeypatch)
+
+    first = await ingest_local_pdf(conn, project.id, workspace, source, doi="10.1/repeat")
+    second = await ingest_local_pdf(conn, project.id, workspace, source, doi="10.1/repeat")
+    pdf_dir = workspace / project.slug / "pdfs"
+    pdf_files = list(pdf_dir.glob("*.pdf"))
+
+    assert second["id"] == first["id"]
+    assert second["citekey"] == first["citekey"]
+    assert second["pdf_path"] == first["pdf_path"]
+    assert len(pdf_files) == 1
 
 
 @pytest.mark.asyncio

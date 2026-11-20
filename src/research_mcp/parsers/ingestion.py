@@ -184,6 +184,7 @@ def _metadata_from_local_pdf(
     file_path: Path,
     doi: str | None,
     crossref: SearchResult | None,
+    digest: str,
 ) -> SearchResult:
     title = (crossref.title if crossref and crossref.title else None) or pdf_metadata.title
     if not title:
@@ -194,7 +195,7 @@ def _metadata_from_local_pdf(
     year = crossref.year if crossref and crossref.year is not None else pdf_metadata.year
     return SearchResult(
         source_provider=crossref.source_provider if crossref else "local_pdf",
-        external_id=crossref.external_id if crossref else f"local:{_hash_file(file_path)}",
+        external_id=crossref.external_id if crossref else f"local:{digest}",
         doi=crossref.doi if crossref and crossref.doi else doi,
         title=title,
         authors=authors,
@@ -285,7 +286,7 @@ async def ingest_remote_paper(
             try:
                 await download_pdf(pdf_url, staging_path, project_dir)
                 digest = _hash_file(staging_path)
-                artifact_stem = f"{remote_paper_id}-{digest}"
+                artifact_stem = f"remote-{digest}"
                 new_pdf_path = project_pdf_dir / f"{artifact_stem}.pdf"
                 new_markdown_path = project_dir / "parsed" / f"{artifact_stem}.md"
                 markdown = extract_markdown(staging_path, project_dir)
@@ -396,14 +397,13 @@ async def ingest_local_pdf(
         else await get_paper_by_pdf_path(conn, project_id, str(local_destination.resolve()))
     )
     existing = existing_doi or existing_local
-    if existing_doi is not None:
-        pdf_path = project_dir / "pdfs" / f"{existing_doi.id}-{digest}.pdf"
-    else:
-        pdf_path = local_destination
+    pdf_path = Path(existing.pdf_path) if existing and existing.pdf_path else local_destination
     pdf_existed = pdf_path.exists()
     import_pdf(source, pdf_path, project_dir)
     pdf_metadata = extract_pdf_metadata(pdf_path, project_dir)
-    metadata = _metadata_from_local_pdf(pdf_metadata, source, normalized_doi, crossref_metadata)
+    metadata = _metadata_from_local_pdf(
+        pdf_metadata, source, normalized_doi, crossref_metadata, digest
+    )
     bibtex = await _get_bibtex(metadata.doi, warnings)
 
     sections: list[SectionData] | None
