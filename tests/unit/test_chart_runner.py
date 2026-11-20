@@ -48,3 +48,30 @@ def test_run_chart_coerces_path_traversal_filename(tmp_path):
     saved = project_dir / "assets" / "evil.png"
     assert saved.exists()
     assert results[0]["path"] == str(saved)
+
+
+def test_chart_runs_do_not_share_namespace(tmp_path):
+    project_dir = tmp_path / "proj"
+    (project_dir / "assets").mkdir(parents=True)
+
+    run_chart(
+        project_dir,
+        "first.png",
+        "leak_marker = 'from-first-call'\n__builtins__['len'] = 'poisoned'\nplt.plot([1], [1])",
+        100,
+    )
+
+    # A fresh namespace must not see variables (or poisoned builtins) from the
+    # previous call — otherwise an unrelated export fails confusingly later.
+    second_code = (
+        "try:\n"
+        "    leak_marker\n"
+        "except NameError:\n"
+        "    pass\n"
+        "else:\n"
+        "    raise ValueError('chart namespace leaked between calls')\n"
+        "assert len([1, 2]) == 2\n"
+        "plt.plot([2], [2])"
+    )
+    run_chart(project_dir, "second.png", second_code, 100)
+    assert (project_dir / "assets" / "second.png").exists()

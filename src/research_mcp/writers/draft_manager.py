@@ -60,9 +60,14 @@ async def write_draft_section(
     order: int | None,
 ) -> dict:
     _validate_filename(filename)
+    existing = await get_draft_section(conn, project_id, filename)
     if order is None:
-        existing = await list_draft_sections(conn, project_id)
-        order = (max((s["section_order"] for s in existing), default=0) + 1) or 1
+        # Re-saving a chapter must not silently move it to the end of the book.
+        if existing is not None:
+            order = existing["section_order"]
+        else:
+            sections = await list_draft_sections(conn, project_id)
+            order = (max((s["section_order"] for s in sections), default=0) + 1) or 1
 
     _write_draft_file(project_dir / "drafts" / filename, project_dir, content)
     title = _derive_title(content)

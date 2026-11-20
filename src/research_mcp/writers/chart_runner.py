@@ -62,6 +62,7 @@ _ALLOWED_BUILTINS = {
     "ValueError": ValueError,
     "TypeError": TypeError,
     "KeyError": KeyError,
+    "NameError": NameError,
     "IndexError": IndexError,
     "ZeroDivisionError": ZeroDivisionError,
 }
@@ -96,7 +97,10 @@ def run_chart(project_dir: Path, filename: str, python_code: str, dpi: int) -> l
     old_stdout, old_stderr = sys.stdout, sys.stderr
     sys.stdout, sys.stderr = captured_stdout, captured_stderr
     try:
-        exec(compile(python_code, "<chart>", "exec"), _CHART_NAMESPACE)
+        # Fresh namespace per call: chart code must never leak state (or a
+        # rebound builtin) into a later project's export.
+        namespace = {**_CHART_NAMESPACE, "__builtins__": dict(_ALLOWED_BUILTINS)}
+        exec(compile(python_code, "<chart>", "exec"), namespace)
         fig_numbers = plt.get_fignums()
         if not fig_numbers:
             raise ValueError("Chart code produced no matplotlib figure.")

@@ -65,6 +65,25 @@ def _resource_args(resource_path: Path | None) -> list[str]:
     return ["--resource-path", str(resource_path)]
 
 
+_TEX_SPECIALS = {
+    "\\": r"\textbackslash{}",
+    "{": r"\{",
+    "}": r"\}",
+    "$": r"\$",
+    "&": r"\&",
+    "#": r"\#",
+    "%": r"\%",
+    "_": r"\_",
+    "~": r"\textasciitilde{}",
+    "^": r"\textasciicircum{}",
+}
+
+
+def _tex_escape(text: str) -> str:
+    """Escape TeX-special characters one at a time (no re-escaping of output)."""
+    return "".join(_TEX_SPECIALS.get(char, char) for char in text)
+
+
 def _inject_graphicspath(tex_path: Path, resource_path: Path) -> None:
     r"""Point `\includegraphics` at the project root so relative `assets/` paths work.
 
@@ -73,7 +92,7 @@ def _inject_graphicspath(tex_path: Path, resource_path: Path) -> None:
     `\graphicspath` entry for the project root fixes that without rewriting the
     document's own Markdown.
     """
-    root = resource_path.resolve().as_posix()
+    root = _tex_escape(resource_path.resolve().as_posix())
     line = f"\\graphicspath{{{{{root}/}}}}\n"
     text = tex_path.read_text(encoding="utf-8")
     marker = "\\begin{document}"

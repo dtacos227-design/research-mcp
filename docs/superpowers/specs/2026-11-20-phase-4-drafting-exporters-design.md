@@ -160,6 +160,17 @@ round:
      additionally receives an injected `\graphicspath` because TeX resolves
      image paths relative to the `.tex` file in `exports/`.
 
+9. **Whole-branch review corrections** (3 Important findings, all reproduced):
+   * Re-saving a draft with `order=None` preserves its existing `section_order`
+     (only new chapters append); otherwise a content edit silently reordered
+     the document.
+   * `run_chart` execs into a fresh namespace (including a fresh copy of the
+     builtins mapping) per call; previously chart code could leak variables or
+     poison `plt`/`len` for later projects' exports.
+   * `\graphicspath` TeX-escapes special characters in the workspace root
+     (`#`, `%`, `_`, `&`, `\`, …). Verified with a real Tectonic compile under a
+     path containing `hash#dir%pct`.
+
 ### 7. Citation gate (shared by exporters)
 
 A small `_run_citation_gate(conn, project_id, markdown, strict)` helper reuses Fase 3's `extract_citekeys` + `diff_citations`: if `strict_citations` and `cited_but_missing` is non-empty, raise `ToolError` naming the missing citekeys before any Pandoc/Tectonic call. Non-strict mode proceeds and returns the missing list as a warning.

@@ -131,9 +131,31 @@ def test_render_latex_injects_graphicspath_for_relative_assets(tmp_path, monkeyp
     )
 
     text = tex.read_text()
-    root = tmp_path.resolve().as_posix()
+    root = latex_engine._tex_escape(tmp_path.resolve().as_posix())
     assert f"\\graphicspath{{{{{root}/}}}}" in text
     assert text.index("\\graphicspath") < text.index("\\begin{document}")
+
+
+def test_render_latex_escapes_tex_specials_in_graphicspath(tmp_path, monkeypatch):
+    def fake_run_pandoc(args, input_text=None):
+        Path(_pair(args, "-o")).write_text("\\begin{document}\nbody\n\\end{document}\n")
+
+    monkeypatch.setattr(latex_engine, "run_pandoc", fake_run_pandoc)
+    monkeypatch.setattr(latex_engine, "detect_pandoc", lambda: "pandoc")
+    tex = tmp_path / "out.tex"
+
+    render_latex(
+        "body",
+        tmp_path / "ieee.tex",
+        tmp_path / "references.bib",
+        tmp_path / "ieee.csl",
+        tex,
+        resource_path=tmp_path / "hash#dir%pct",
+    )
+
+    text = tex.read_text()
+    assert r"\#" in text
+    assert r"\%" in text
 
 
 def test_compile_pdf_invokes_tectonic(tmp_path, monkeypatch):

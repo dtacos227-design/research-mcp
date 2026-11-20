@@ -47,6 +47,25 @@ async def test_save_draft_rejects_path_traversal(project_db):
 
 
 @pytest.mark.asyncio
+async def test_resaving_existing_draft_preserves_its_order(project_db):
+    project, _ = project_db
+    await save_draft_section(project.id, "01_abstract.md", "# Abstract\nold", order=1)
+    await save_draft_section(project.id, "02_intro.md", "# Intro\nold", order=2)
+
+    await save_draft_section(project.id, "01_abstract.md", "# Abstract\nnew")
+
+    conn = await get_connection(get_settings().db_path)
+    try:
+        sections = await list_draft_sections(conn, project.id)
+    finally:
+        await conn.close()
+    assert [(s["filename"], s["section_order"]) for s in sections] == [
+        ("01_abstract.md", 1),
+        ("02_intro.md", 2),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_second_save_updates_word_count_without_duplicate_file(project_db):
     project, workspace_root = project_db
     await save_draft_section(project.id, "01_abstract.md", "short")
