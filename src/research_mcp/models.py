@@ -25,6 +25,7 @@ class PaperModel(BaseModel):
     citation_count: int = 0
     pdf_path: str | None = None
     source_provider: str | None = None
+    external_id: str | None = None
     bibtex_raw: str | None = None
     csl_json: str | None = None
     created_at: str

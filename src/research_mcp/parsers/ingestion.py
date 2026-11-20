@@ -11,6 +11,7 @@ from research_mcp.citations.bibtex import generate_citekey
 from research_mcp.config import get_settings
 from research_mcp.db.repository import (
     get_paper_by_doi,
+    get_paper_by_external_id,
     get_paper_by_pdf_path,
     get_project,
     list_sections,
@@ -91,8 +92,13 @@ async def _existing_paper(
     project_id: str,
     doi: str | None,
     pdf_path: Path | None = None,
+    *,
+    source_provider: str | None = None,
+    external_id: str | None = None,
 ):
     paper = await get_paper_by_doi(conn, project_id, doi) if doi else None
+    if paper is None and source_provider and external_id:
+        paper = await get_paper_by_external_id(conn, project_id, source_provider, external_id)
     if paper is None and pdf_path is not None:
         paper = await get_paper_by_pdf_path(conn, project_id, str(pdf_path))
     return paper
@@ -113,6 +119,8 @@ async def _make_paper(
         project_id,
         metadata.doi,
         lookup_pdf_path or pdf_path,
+        source_provider=metadata.source_provider,
+        external_id=metadata.external_id,
     )
     async with conn.execute(
         "SELECT citekey FROM papers WHERE project_id = ?",
@@ -143,6 +151,7 @@ async def _make_paper(
         citation_count=metadata.citation_count,
         pdf_path=str(pdf_path) if pdf_path is not None else None,
         source_provider=metadata.source_provider,
+        external_id=metadata.external_id,
         bibtex_raw=bibtex,
         created_at=existing.created_at if existing else datetime.now(UTC).isoformat(),
     )
@@ -262,7 +271,13 @@ async def ingest_remote_paper(
     metadata = await resolve_identifier(identifier)
     warnings: list[str] = []
     bibtex = await _get_bibtex(metadata.doi, warnings)
-    previous = await _existing_paper(conn, project_id, metadata.doi)
+    previous = await _existing_paper(
+        conn,
+        project_id,
+        metadata.doi,
+        source_provider=metadata.source_provider,
+        external_id=metadata.external_id,
+    )
     remote_paper_id = previous.id if previous else uuid.uuid4().hex
 
     pdf_path = Path(previous.pdf_path) if previous and previous.pdf_path else None
@@ -286,7 +301,7 @@ async def ingest_remote_paper(
             try:
                 await download_pdf(pdf_url, staging_path, project_dir)
                 digest = _hash_file(staging_path)
-                artifact_stem = f"remote-{digest}"
+                artifact_stem = f"{remote_paper_id}-{digest}"
                 new_pdf_path = project_pdf_dir / f"{artifact_stem}.pdf"
                 new_markdown_path = project_dir / "parsed" / f"{artifact_stem}.md"
                 markdown = extract_markdown(staging_path, project_dir)

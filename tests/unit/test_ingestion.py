@@ -218,6 +218,34 @@ async def test_reingest_without_doi_same_content_reuses_paper(db, monkeypatch: p
 
 
 @pytest.mark.asyncio
+async def test_reingest_without_doi_metadata_only_after_download_reuses_paper(
+    db, monkeypatch: pytest.MonkeyPatch
+):
+    conn, project, workspace, _ = db
+    found = search_result(
+        source_provider="arxiv",
+        external_id="1706.03762v7",
+        doi=None,
+        title="Attention Is All You Need",
+        pdf_url="https://export.arxiv.org/pdf/1706.03762v7",
+    )
+    monkeypatch.setattr(
+        "research_mcp.parsers.ingestion.search_all",
+        AsyncMock(return_value=AggregatedSearch(results=[found], errors={})),
+    )
+    patch_download(monkeypatch)
+    patch_parser(monkeypatch, "# Introduction\nTransformer text.")
+
+    first = await ingest_remote_paper(conn, project.id, workspace, "1706.03762v7", download=True)
+    second = await ingest_remote_paper(conn, project.id, workspace, "1706.03762v7", download=False)
+
+    assert second["id"] == first["id"]
+    assert second["citekey"] == first["citekey"]
+    assert second["pdf_path"] == first["pdf_path"]
+    assert second["section_count"] == first["section_count"]
+
+
+@pytest.mark.asyncio
 async def test_unknown_identifier_raises_actionable_ingestion_error(monkeypatch):
     monkeypatch.setattr(
         "research_mcp.parsers.ingestion.get_by_doi",

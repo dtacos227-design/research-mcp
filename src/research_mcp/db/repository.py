@@ -137,7 +137,8 @@ async def _get_paper(
     async with conn.execute(
         f"""
         SELECT id, project_id, citekey, doi, title, authors_json, year, venue, abstract,
-               citation_count, pdf_path, source_provider, bibtex_raw, csl_json, created_at
+               citation_count, pdf_path, source_provider, external_id, bibtex_raw, csl_json,
+               created_at
         FROM papers
         WHERE project_id = ? AND {where_clause} = ?
         """,
@@ -159,9 +160,10 @@ async def _get_paper(
         citation_count=row[9],
         pdf_path=row[10],
         source_provider=row[11],
-        bibtex_raw=row[12],
-        csl_json=row[13],
-        created_at=row[14],
+        external_id=row[12],
+        bibtex_raw=row[13],
+        csl_json=row[14],
+        created_at=row[15],
     )
 
 
@@ -189,6 +191,45 @@ async def get_paper_by_pdf_path(
     return await _get_paper(conn, project_id, "pdf_path", pdf_path)
 
 
+async def get_paper_by_external_id(
+    conn: aiosqlite.Connection,
+    project_id: str,
+    source_provider: str,
+    external_id: str,
+) -> PaperModel | None:
+    async with conn.execute(
+        """
+        SELECT id, project_id, citekey, doi, title, authors_json, year, venue, abstract,
+               citation_count, pdf_path, source_provider, external_id, bibtex_raw, csl_json,
+               created_at
+        FROM papers
+        WHERE project_id = ? AND source_provider = ? AND external_id = ?
+        """,
+        (project_id, source_provider, external_id),
+    ) as cursor:
+        row = await cursor.fetchone()
+    if row is None:
+        return None
+    return PaperModel(
+        id=row[0],
+        project_id=row[1],
+        citekey=row[2],
+        doi=row[3],
+        title=row[4],
+        authors=json.loads(row[5]),
+        year=row[6],
+        venue=row[7],
+        abstract=row[8],
+        citation_count=row[9],
+        pdf_path=row[10],
+        source_provider=row[11],
+        external_id=row[12],
+        bibtex_raw=row[13],
+        csl_json=row[14],
+        created_at=row[15],
+    )
+
+
 async def save_paper_and_sections(
     conn: aiosqlite.Connection,
     project_id: str,
@@ -197,6 +238,10 @@ async def save_paper_and_sections(
 ) -> PaperModel:
     await get_project(conn, project_id)
     existing = await get_paper_by_doi(conn, project_id, paper.doi) if paper.doi else None
+    if existing is None and paper.source_provider and paper.external_id:
+        existing = await get_paper_by_external_id(
+            conn, project_id, paper.source_provider, paper.external_id
+        )
     if existing is None and paper.pdf_path:
         existing = await get_paper_by_pdf_path(conn, project_id, paper.pdf_path)
 
@@ -220,8 +265,9 @@ async def save_paper_and_sections(
                 """
                 INSERT INTO papers (
                     id, project_id, citekey, doi, title, authors_json, year, venue, abstract,
-                    citation_count, pdf_path, source_provider, bibtex_raw, csl_json, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    citation_count, pdf_path, source_provider, external_id, bibtex_raw, csl_json,
+                    created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     stored.id,
@@ -236,6 +282,7 @@ async def save_paper_and_sections(
                     stored.citation_count,
                     stored.pdf_path,
                     stored.source_provider,
+                    stored.external_id,
                     stored.bibtex_raw,
                     stored.csl_json,
                     stored.created_at,
@@ -246,8 +293,8 @@ async def save_paper_and_sections(
                 """
                 UPDATE papers
                 SET doi = ?, title = ?, authors_json = ?, year = ?, venue = ?, abstract = ?,
-                    citation_count = ?, pdf_path = ?, source_provider = ?, bibtex_raw = ?,
-                    csl_json = ?
+                    citation_count = ?, pdf_path = ?, source_provider = ?, external_id = ?,
+                    bibtex_raw = ?, csl_json = ?
                 WHERE id = ? AND project_id = ?
                 """,
                 (
@@ -260,6 +307,7 @@ async def save_paper_and_sections(
                     stored.citation_count,
                     stored.pdf_path,
                     stored.source_provider,
+                    stored.external_id,
                     stored.bibtex_raw,
                     stored.csl_json,
                     stored.id,
