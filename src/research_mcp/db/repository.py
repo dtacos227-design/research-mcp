@@ -500,3 +500,80 @@ async def search_sections(
         }
         for row in rows
     ]
+
+
+async def upsert_draft_section(
+    conn: aiosqlite.Connection,
+    project_id: str,
+    filename: str,
+    section_order: int,
+    title: str | None,
+    word_count: int,
+) -> None:
+    now = datetime.now(UTC).isoformat()
+    await conn.execute(
+        """
+        INSERT INTO draft_sections (
+            project_id, filename, section_order, title, word_count, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(project_id, filename) DO UPDATE SET
+            section_order = excluded.section_order,
+            title = excluded.title,
+            word_count = excluded.word_count,
+            updated_at = excluded.updated_at
+        """,
+        (project_id, filename, section_order, title, word_count, now),
+    )
+    await conn.commit()
+
+
+async def get_draft_section(
+    conn: aiosqlite.Connection,
+    project_id: str,
+    filename: str,
+) -> dict | None:
+    async with conn.execute(
+        """
+        SELECT filename, section_order, title, word_count, updated_at
+        FROM draft_sections
+        WHERE project_id = ? AND filename = ?
+        """,
+        (project_id, filename),
+    ) as cursor:
+        row = await cursor.fetchone()
+    if row is None:
+        return None
+    return {
+        "filename": row[0],
+        "section_order": row[1],
+        "title": row[2],
+        "word_count": row[3],
+        "updated_at": row[4],
+    }
+
+
+async def list_draft_sections(
+    conn: aiosqlite.Connection,
+    project_id: str,
+) -> list[dict]:
+    async with conn.execute(
+        """
+        SELECT filename, section_order, title, word_count, updated_at
+        FROM draft_sections
+        WHERE project_id = ?
+        ORDER BY section_order, filename
+        """,
+        (project_id,),
+    ) as cursor:
+        rows = await cursor.fetchall()
+    return [
+        {
+            "filename": row[0],
+            "section_order": row[1],
+            "title": row[2],
+            "word_count": row[3],
+            "updated_at": row[4],
+        }
+        for row in rows
+    ]

@@ -12,6 +12,11 @@ dependencies = [
     "aiosqlite>=0.20",
     "pymupdf4llm>=0.0.17",
     "bibtexparser>=2.1.0",
+    "python-docx>=1.2.0",
+    "matplotlib>=3.11.2",
+    "seaborn>=0.13.2",
+    "pandas>=3.1.1",
+    "numpy>=2.4.6",
 ]
 
 [project.scripts]
