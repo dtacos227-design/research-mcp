@@ -146,11 +146,11 @@ def build_bibtex_entry(paper: PaperModel) -> str:
     if paper.authors:
         fields.append(("author", _escape_bibtex_field(_bibtex_author(paper))))
     if paper.year is not None:
-        fields.append(("year", str(paper.year)))
+        fields.append(("year", _escape_bibtex_field(str(paper.year))))
     if paper.venue:
         fields.append(("journal", _escape_bibtex_field(paper.venue)))
     if paper.doi:
-        fields.append(("doi", paper.doi))
+        fields.append(("doi", _escape_bibtex_field(paper.doi)))
 
     return _render_bibtex(entry_type_name, paper.citekey, fields)
 

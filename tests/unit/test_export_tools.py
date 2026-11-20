@@ -47,9 +47,16 @@ async def project_with_drafts(tmp_path, monkeypatch):
 
 
 def _fake_render_engine(recorded, payload=b"rendered"):
-    def fake(markdown, *args):
+    def fake(markdown, *args, **kwargs):
         output = args[-1]
-        recorded.append({"markdown": markdown, "bib": args[0], "output": output})
+        recorded.append(
+            {
+                "markdown": markdown,
+                "bib": args[0],
+                "output": output,
+                "resource_path": kwargs.get("resource_path"),
+            }
+        )
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(payload)
         return output
@@ -112,6 +119,7 @@ async def test_docx_export_writes_docx_and_refreshes_bibliography(project_with_d
     assert result["cited_but_missing"] == []
     assert result["warnings"] == []
     assert polished == [(output, project.name)]
+    assert recorded[0]["resource_path"] == workspace_root / project.slug
     bib_text = (workspace_root / project.slug / "references.bib").read_text()
     assert "doe2024valid" in bib_text
     csl_text = (workspace_root / project.slug / "references.csl.json").read_text()
@@ -141,8 +149,16 @@ async def test_latex_export_reports_tex_and_pdf_paths(project_with_drafts, monke
     recorded = []
     from research_mcp import server
 
-    def fake_render_latex(markdown, template_path, bib_path, csl_path, output_tex):
-        recorded.append({"markdown": markdown, "template": template_path})
+    def fake_render_latex(
+        markdown, template_path, bib_path, csl_path, output_tex, resource_path=None
+    ):
+        recorded.append(
+            {
+                "markdown": markdown,
+                "template": template_path,
+                "resource_path": resource_path,
+            }
+        )
         output_tex.parent.mkdir(parents=True, exist_ok=True)
         output_tex.write_text("\\documentclass{article}")
         return output_tex

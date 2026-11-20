@@ -619,7 +619,14 @@ async def export_to_docx(
                 bundled_template(f"csl/{csl_name}.csl") as csl_path,
                 bundled_template(f"docx/{docx_name}.docx") as reference_doc,
             ):
-                render_docx(markdown, bib_path, csl_path, reference_doc, output)
+                render_docx(
+                    markdown,
+                    bib_path,
+                    csl_path,
+                    reference_doc,
+                    output,
+                    resource_path=project_dir,
+                )
             if polish:
                 polish_docx(output, project.name)
 
@@ -676,7 +683,14 @@ async def export_to_latex(
                 bundled_template(f"csl/{csl_name}.csl") as csl_path,
                 bundled_template(f"latex/{latex_name}.tex") as template_path,
             ):
-                latex_engine.render_latex(markdown, template_path, bib_path, csl_path, tex_path)
+                latex_engine.render_latex(
+                    markdown,
+                    template_path,
+                    bib_path,
+                    csl_path,
+                    tex_path,
+                    resource_path=project_dir,
+                )
 
             pdf_path: Path | None = None
             if compile_pdf:
@@ -732,7 +746,7 @@ async def export_to_markdown_bundle(
             bib_path, _csl_json = await _refresh_bibliography(conn, project_id, project_dir)
 
             with bundled_template(f"csl/{csl_name}.csl") as csl_path:
-                render_markdown(markdown, bib_path, csl_path, output)
+                render_markdown(markdown, bib_path, csl_path, output, resource_path=project_dir)
 
             return {
                 "output_path": str(output),

@@ -62,6 +62,14 @@ def test_build_bibtex_entry_without_raw():
     assert bib["year"] == "2024"
 
 
+def test_build_bibtex_entry_braces_every_value_for_pandoc():
+    # Pandoc's BibTeX reader rejects bare values such as `doi = 10.1/x,`.
+    paper = make_paper()
+    entry = build_bibtex_entry(paper)
+    assert "year = {2024}," in entry
+    assert "doi = {10.1/x}," in entry
+
+
 def test_build_bibtex_entry_rekeys_raw():
     raw = (
         "@article{some_crossref_key,\n"

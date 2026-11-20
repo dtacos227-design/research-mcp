@@ -49,6 +49,13 @@ def merge_draft_markdown(project_dir: Path, sections: list[dict]) -> str:
     return "\n\n".join(pieces)
 
 
+def _resource_args(resource_path: Path | None) -> list[str]:
+    """Extra pandoc flags so relative `assets/...` links resolve from the project root."""
+    if resource_path is None:
+        return []
+    return ["--resource-path", str(resource_path)]
+
+
 def _read_draft(path: Path) -> str | None:
     if not path.is_file():
         return None
@@ -79,6 +86,7 @@ def render_markdown(
     bib_path: Path,
     csl_path: Path,
     output: Path,
+    resource_path: Path | None = None,
 ) -> Path:
     """Render merged Markdown through Citeproc and write a self-contained `.md`."""
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -90,10 +98,13 @@ def render_markdown(
         "--to",
         "markdown",
         "--citeproc",
+        "--metadata",
+        "reference-section-title=References",
         "--bibliography",
         str(bib_path),
         "--csl",
         str(csl_path),
+        *_resource_args(resource_path),
         "-o",
         str(output),
     ]
@@ -107,6 +118,7 @@ def render_docx(
     csl_path: Path,
     reference_doc: Path,
     output: Path,
+    resource_path: Path | None = None,
 ) -> Path:
     """Render merged Markdown to `.docx` via Pandoc + Citeproc."""
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -118,12 +130,15 @@ def render_docx(
         "--to",
         "docx",
         "--citeproc",
+        "--metadata",
+        "reference-section-title=References",
         "--bibliography",
         str(bib_path),
         "--csl",
         str(csl_path),
         "--reference-doc",
         str(reference_doc),
+        *_resource_args(resource_path),
         "-o",
         str(output),
     ]

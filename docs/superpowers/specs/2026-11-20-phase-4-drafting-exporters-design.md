@@ -142,6 +142,23 @@ round:
    `templates/**` (verified via `uv build`); no `[tool.setuptools]`/package-data
    config is needed or wanted. Templates load via
    `importlib.resources.files("research_mcp.templates")`.
+8. **Task 6 integration corrections** (found by running the real binaries, not
+   by mocked tests):
+   * Every BibTeX field emitted by `build_bibtex_entry` is now brace-quoted,
+     including `year` and `doi`. Pandoc 3's BibTeX reader rejects bare values
+     such as `doi = 10.1234/x,` ("unexpected '.'"). Fase 3's tests used
+     `bibtexparser`, which tolerates them, so this only surfaced at export time.
+   * All three renderers pass `-M reference-section-title=References` so the
+     `-t markdown` bundle gets a real `# References` heading (otherwise
+     Citeproc emits a bare fenced `refs` div with no title).
+   * `ieee.tex` uses `\documentclass[10pt,journal,onecolumn]{IEEEtran}`.
+     IEEEtran's default `journal` mode is two-column and Pandoc always renders
+     pipe tables as `longtable`, which hard-errors with "longtable not in
+     1-column mode" under Tectonic/XeTeX. `onecolumn` keeps IEEE typography and
+     makes tables compile; it is an IEEEtran-supported class option.
+   * Pandoc `--resource-path <project_dir>` resolves `assets/...` links; LaTeX
+     additionally receives an injected `\graphicspath` because TeX resolves
+     image paths relative to the `.tex` file in `exports/`.
 
 ### 7. Citation gate (shared by exporters)
 

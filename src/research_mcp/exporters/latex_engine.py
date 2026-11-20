@@ -28,6 +28,7 @@ def render_latex(
     bib_path: Path,
     csl_path: Path,
     output_tex: Path,
+    resource_path: Path | None = None,
 ) -> Path:
     """Render merged Markdown to a standalone `.tex` document via Pandoc + Citeproc."""
     output_tex.parent.mkdir(parents=True, exist_ok=True)
@@ -40,17 +41,47 @@ def render_latex(
         "latex",
         "--standalone",
         "--citeproc",
+        "--metadata",
+        "reference-section-title=References",
         "--bibliography",
         str(bib_path),
         "--csl",
         str(csl_path),
         "--template",
         str(template_path),
+        *_resource_args(resource_path),
         "-o",
         str(output_tex),
     ]
     run_pandoc(args, input_text=markdown)
+    if resource_path is not None:
+        _inject_graphicspath(output_tex, resource_path)
     return output_tex
+
+
+def _resource_args(resource_path: Path | None) -> list[str]:
+    if resource_path is None:
+        return []
+    return ["--resource-path", str(resource_path)]
+
+
+def _inject_graphicspath(tex_path: Path, resource_path: Path) -> None:
+    r"""Point `\includegraphics` at the project root so relative `assets/` paths work.
+
+    Pandoc emits paths exactly as written in the Markdown, while LaTeX resolves
+    them relative to the `.tex` file (which lives in `exports/`). Adding a
+    `\graphicspath` entry for the project root fixes that without rewriting the
+    document's own Markdown.
+    """
+    root = resource_path.resolve().as_posix()
+    line = f"\\graphicspath{{{{{root}/}}}}\n"
+    text = tex_path.read_text(encoding="utf-8")
+    marker = "\\begin{document}"
+    if marker in text:
+        text = text.replace(marker, line + marker, 1)
+    else:
+        text = line + text
+    tex_path.write_text(text, encoding="utf-8")
 
 
 def compile_pdf(tex_path: Path, exports_dir: Path) -> Path:
