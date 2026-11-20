@@ -12,6 +12,19 @@ from research_mcp.citations.verifier import diff_citations, extract_citekeys
 from research_mcp.config import configure_logging, get_settings
 from research_mcp.db import repository
 from research_mcp.db.database import get_connection
+from research_mcp.exporters import latex_engine
+from research_mcp.exporters.docx_polisher import polish_docx
+from research_mcp.exporters.pandoc_engine import (
+    merge_draft_markdown,
+    render_docx,
+    render_markdown,
+)
+from research_mcp.exporters.templates import (
+    bundled_template,
+    resolve_csl,
+    resolve_docx_template,
+    resolve_latex_template,
+)
 from research_mcp.parsers.ingestion import (
     _safe_destination,
     ingest_local_pdf,
@@ -398,6 +411,69 @@ def _write_file(path: Path, project_dir: Path, text: str) -> None:
         raise
 
 
+async def _citation_gate(
+    conn,
+    project_id: str,
+    markdown: str,
+    strict: bool,
+) -> list[str]:
+    """Return citekeys cited in `markdown` but absent from the project library.
+
+    In strict mode a non-empty result halts the export before any Pandoc or
+    Tectonic call runs.
+    """
+    referenced = extract_citekeys(markdown)
+    papers = await repository.list_papers(conn, project_id)
+    missing, _found, _uncited = diff_citations(referenced, {paper.citekey for paper in papers})
+    if strict and missing:
+        raise ToolError(
+            "Citation gate failed: the draft cites citekey(s) that are not in this "
+            f"project's library: {', '.join(missing)}. Save the papers first, fix the "
+            "citekeys, or export with strict_citations=False."
+        )
+    return missing
+
+
+async def _refresh_bibliography(conn, project_id: str, project_dir: Path) -> tuple[Path, Path]:
+    """Rewrite references.bib and references.csl.json from the project's papers."""
+    papers = await repository.list_papers(conn, project_id)
+    entries = [build_bibtex_entry(paper) for paper in papers]
+    bib_path = _safe_destination(project_dir / "references.bib", project_dir)
+    _write_file(bib_path, project_dir, "\n\n".join(entries) + "\n")
+
+    csl_entries = [build_csl_entry(paper) for paper in papers]
+    csl_path = _safe_destination(project_dir / "references.csl.json", project_dir)
+    _write_file(csl_path, project_dir, json.dumps(csl_entries, ensure_ascii=False, indent=2))
+    return bib_path, csl_path
+
+
+def _export_target(project_dir: Path, output_name: str, extension: str) -> Path:
+    name = output_name.strip()
+    if extension == ".tex":
+        name = name.removesuffix(".tex").removesuffix(".pdf")
+    if not name or name in {".", ".."} or "/" in name or "\\" in name or ".." in name:
+        raise ToolError(
+            f"output_name {output_name!r} must be a plain file name without directories."
+        )
+    if not name.lower().endswith(extension):
+        name = f"{name}{extension}"
+    return _safe_destination(project_dir / "exports" / name, project_dir)
+
+
+def _draft_markdown_or_raise(markdown: str) -> str:
+    if not markdown.strip():
+        raise ToolError(
+            "This project has no draft chapters to export. Write one with save_draft_section first."
+        )
+    return markdown
+
+
+def _warnings_for_missing(missing: list[str]) -> list[str]:
+    if not missing:
+        return []
+    return [f"Undefined citekey(s) left unresolved by Citeproc: {', '.join(missing)}."]
+
+
 @mcp.tool()
 async def generate_bibliography(
     project_id: str,
@@ -503,6 +579,175 @@ async def verify_citations(project_id: str, markdown_text: str | None = None) ->
     except Exception as exc:
         raise ToolError(
             f"Could not verify citations for project {project_id!r}: {type(exc).__name__}: {exc}"
+        ) from exc
+
+
+@mcp.tool()
+async def export_to_docx(
+    project_id: str,
+    output_name: str,
+    csl_style: str = "apa",
+    template_name: str = "default_academic",
+    polish: bool = True,
+    strict_citations: bool = True,
+) -> dict:
+    """Export every draft chapter to one `.docx` via Pandoc + Citeproc.
+
+    Regenerates references.bib/references.csl.json from the project library,
+    merges the draft chapters in section order, verifies every `[@citekey]`
+    against that library, then converts. Writes to `exports/<output_name>.docx`.
+    """
+    try:
+        settings = get_settings()
+        conn = await get_connection(settings.db_path)
+        try:
+            try:
+                project = await repository.get_project(conn, project_id)
+            except repository.ProjectNotFoundError as exc:
+                raise ToolError(str(exc)) from exc
+            project_dir = _project_dir(settings, project)
+            output = _export_target(project_dir, output_name, ".docx")
+            csl_name = resolve_csl(csl_style)
+            docx_name = resolve_docx_template(template_name)
+
+            sections = await repository.list_draft_sections(conn, project_id)
+            markdown = _draft_markdown_or_raise(merge_draft_markdown(project_dir, sections))
+            missing = await _citation_gate(conn, project_id, markdown, strict_citations)
+            bib_path, _csl_json = await _refresh_bibliography(conn, project_id, project_dir)
+
+            with (
+                bundled_template(f"csl/{csl_name}.csl") as csl_path,
+                bundled_template(f"docx/{docx_name}.docx") as reference_doc,
+            ):
+                render_docx(markdown, bib_path, csl_path, reference_doc, output)
+            if polish:
+                polish_docx(output, project.name)
+
+            return {
+                "output_path": str(output),
+                "format": "docx",
+                "csl_style": csl_style,
+                "template_name": template_name,
+                "cited_but_missing": missing,
+                "warnings": _warnings_for_missing(missing),
+            }
+        finally:
+            await conn.close()
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(
+            f"Could not export project {project_id!r} to DOCX: {type(exc).__name__}: {exc}"
+        ) from exc
+
+
+@mcp.tool()
+async def export_to_latex(
+    project_id: str,
+    output_name: str,
+    template_name: str = "ieee",
+    compile_pdf: bool = True,
+    strict_citations: bool = True,
+) -> dict:
+    """Export every draft chapter to a standalone `.tex`, optionally compiling a PDF.
+
+    Writes `exports/<output_name>.tex` and, when `compile_pdf` is true, compiles
+    it with Tectonic into `exports/<output_name>.pdf`.
+    """
+    try:
+        settings = get_settings()
+        conn = await get_connection(settings.db_path)
+        try:
+            try:
+                project = await repository.get_project(conn, project_id)
+            except repository.ProjectNotFoundError as exc:
+                raise ToolError(str(exc)) from exc
+            project_dir = _project_dir(settings, project)
+            tex_path = _export_target(project_dir, output_name, ".tex")
+            latex_name = resolve_latex_template(template_name)
+            csl_name = "ieee" if latex_name == "ieee" else "apa"
+
+            sections = await repository.list_draft_sections(conn, project_id)
+            markdown = _draft_markdown_or_raise(merge_draft_markdown(project_dir, sections))
+            missing = await _citation_gate(conn, project_id, markdown, strict_citations)
+            bib_path, _csl_json = await _refresh_bibliography(conn, project_id, project_dir)
+
+            with (
+                bundled_template(f"csl/{csl_name}.csl") as csl_path,
+                bundled_template(f"latex/{latex_name}.tex") as template_path,
+            ):
+                latex_engine.render_latex(markdown, template_path, bib_path, csl_path, tex_path)
+
+            pdf_path: Path | None = None
+            if compile_pdf:
+                pdf_path = latex_engine.compile_pdf(tex_path, tex_path.parent)
+
+            return {
+                "output_path": str(pdf_path or tex_path),
+                "format": "latex",
+                "tex_path": str(tex_path),
+                "pdf_path": str(pdf_path) if pdf_path else None,
+                "template_name": template_name,
+                "csl_style": csl_name,
+                "cited_but_missing": missing,
+                "warnings": _warnings_for_missing(missing),
+            }
+        finally:
+            await conn.close()
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(
+            f"Could not export project {project_id!r} to LaTeX: {type(exc).__name__}: {exc}"
+        ) from exc
+
+
+@mcp.tool()
+async def export_to_markdown_bundle(
+    project_id: str,
+    output_name: str,
+    csl_style: str = "apa",
+    strict_citations: bool = True,
+) -> dict:
+    """Merge all draft chapters into one Citeproc-rendered Markdown file.
+
+    In-text `[@citekey]` markers are formatted and a reference list is appended;
+    the result is written to `exports/<output_name>.md`.
+    """
+    try:
+        settings = get_settings()
+        conn = await get_connection(settings.db_path)
+        try:
+            try:
+                project = await repository.get_project(conn, project_id)
+            except repository.ProjectNotFoundError as exc:
+                raise ToolError(str(exc)) from exc
+            project_dir = _project_dir(settings, project)
+            output = _export_target(project_dir, output_name, ".md")
+            csl_name = resolve_csl(csl_style)
+
+            sections = await repository.list_draft_sections(conn, project_id)
+            markdown = _draft_markdown_or_raise(merge_draft_markdown(project_dir, sections))
+            missing = await _citation_gate(conn, project_id, markdown, strict_citations)
+            bib_path, _csl_json = await _refresh_bibliography(conn, project_id, project_dir)
+
+            with bundled_template(f"csl/{csl_name}.csl") as csl_path:
+                render_markdown(markdown, bib_path, csl_path, output)
+
+            return {
+                "output_path": str(output),
+                "format": "markdown",
+                "csl_style": csl_style,
+                "cited_but_missing": missing,
+                "warnings": _warnings_for_missing(missing),
+            }
+        finally:
+            await conn.close()
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(
+            f"Could not export project {project_id!r} to Markdown: {type(exc).__name__}: {exc}"
         ) from exc
 
 

@@ -74,6 +74,33 @@ def run_pandoc(args: list[str], input_text: str | None = None) -> subprocess.Com
     return result
 
 
+def render_markdown(
+    markdown: str,
+    bib_path: Path,
+    csl_path: Path,
+    output: Path,
+) -> Path:
+    """Render merged Markdown through Citeproc and write a self-contained `.md`."""
+    output.parent.mkdir(parents=True, exist_ok=True)
+    args = [
+        detect_pandoc(),
+        "-",
+        "--from",
+        "markdown",
+        "--to",
+        "markdown",
+        "--citeproc",
+        "--bibliography",
+        str(bib_path),
+        "--csl",
+        str(csl_path),
+        "-o",
+        str(output),
+    ]
+    run_pandoc(args, input_text=markdown)
+    return output
+
+
 def render_docx(
     markdown: str,
     bib_path: Path,
