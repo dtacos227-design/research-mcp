@@ -21,9 +21,9 @@ async def project_with_papers(tmp_path, monkeypatch):
 
     raw = (
         "@article{some_crossref_key,\n"
-        '  author = {Doe, Jane},\n'
-        '  title = {Publisher Title},\n'
-        '  journal = {Nature},\n'
+        "  author = {Doe, Jane},\n"
+        "  title = {Publisher Title},\n"
+        "  journal = {Nature},\n"
         "  year = {2020},\n"
         "}\n"
     )

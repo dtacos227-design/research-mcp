@@ -2,6 +2,7 @@ import json
 import re
 from pathlib import Path
 from typing import Literal
+from uuid import uuid4
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
@@ -304,7 +305,124 @@ async def import_local_pdf(
         ) from exc
 
 
+_VALID_BIB_FORMATS = {"bibtex", "csl_json"}
+
+
+def _project_dir(settings, project: object) -> Path:
+    return settings.workspace_dir / project.slug
+
+
+def _write_file(path: Path, project_dir: Path, text: str) -> None:
+    safe = _safe_destination(path, project_dir)
+    safe.parent.mkdir(parents=True, exist_ok=True)
+    temporary = safe.with_name(f".{safe.name}.{uuid4().hex}.part")
+    try:
+        temporary.write_text(text, encoding="utf-8")
+        temporary.replace(safe)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
+@mcp.tool()
+async def generate_bibliography(
+    project_id: str,
+    formats: list[str] = ["bibtex", "csl_json"],  # noqa: B006
+) -> dict:
+    """Rebuild the project's references.bib and/or references.csl.json from saved papers."""
+    invalid = [f for f in formats if f not in _VALID_BIB_FORMATS]
+    if invalid:
+        raise ToolError(
+            f"Unknown bibliography format(s) {invalid!r}; "
+            f"choose from {sorted(_VALID_BIB_FORMATS)!r}."
+        )
+    settings = get_settings()
+    conn = await get_connection(settings.db_path)
+    try:
+        try:
+            project = await repository.get_project(conn, project_id)
+        except repository.ProjectNotFoundError as exc:
+            raise ToolError(str(exc)) from exc
+        papers = await repository.list_papers(conn, project_id)
+        project_dir = _project_dir(settings, project)
+
+        bib_path: str | None = None
+        csl_json_path: str | None = None
+
+        if "bibtex" in formats:
+            entries = [build_bibtex_entry(p) for p in papers]
+            target = _safe_destination(project_dir / "references.bib", project_dir)
+            _write_file(target, project_dir, "\n\n".join(entries) + "\n")
+            bib_path = str(target)
+
+        if "csl_json" in formats:
+            csl_entries = [build_csl_entry(p) for p in papers]
+            target = _safe_destination(project_dir / "references.csl.json", project_dir)
+            _write_file(target, project_dir, json.dumps(csl_entries, ensure_ascii=False, indent=2))
+            csl_json_path = str(target)
+            for paper, entry in zip(papers, csl_entries, strict=True):
+                await repository.set_paper_csl_json(
+                    conn, paper.id, json.dumps(entry, ensure_ascii=False)
+                )
+            await conn.commit()
+
+        return {
+            "bib_path": bib_path,
+            "csl_json_path": csl_json_path,
+            "paper_count": len(papers),
+        }
+    finally:
+        await conn.close()
+
+
+@mcp.tool()
+async def verify_citations(project_id: str, markdown_text: str | None = None) -> dict:
+    """Audit [@citekey] references against the project's library; flag missing and uncited."""
+    settings = get_settings()
+    conn = await get_connection(settings.db_path)
+    try:
+        try:
+            project = await repository.get_project(conn, project_id)
+        except repository.ProjectNotFoundError as exc:
+            raise ToolError(str(exc)) from exc
+
+        if markdown_text is None:
+            drafts_dir = _project_dir(settings, project) / "drafts"
+            markdown_text = "\n".join(
+                path.read_text(encoding="utf-8") for path in sorted(drafts_dir.glob("*.md"))
+            )
+            source = "drafts_directory"
+        else:
+            source = "markdown_text"
+
+        referenced = extract_citekeys(markdown_text)
+        papers = await repository.list_papers(conn, project_id)
+        library = {paper.citekey for paper in papers}
+        missing, found, unreferenced = diff_citations(referenced, library)
+
+        uncited = [
+            {"citekey": paper.citekey, "title": paper.title}
+            for paper in papers
+            if paper.citekey in unreferenced
+        ]
+        return {
+            "cited_but_missing": missing,
+            "uncited_papers": uncited,
+            "cited_and_found": found,
+            "source": source,
+        }
+    finally:
+        await conn.close()
+
+
 def main() -> None:
+    settings = get_settings()
+    configure_logging(settings.log_level)
+    mcp.run()
+
+
+if __name__ == "__main__":
+    main()
     settings = get_settings()
     configure_logging(settings.log_level)
     mcp.run()
