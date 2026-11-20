@@ -21,6 +21,7 @@ from research_mcp.providers.aggregator import search_all
 from research_mcp.providers.crossref import get_bibtex, get_by_doi
 from research_mcp.providers.semantic_scholar import get_citations, get_references
 from research_mcp.providers.unpaywall import get_oa_location
+from research_mcp.writers import draft_manager
 
 mcp = MCPServer("research-mcp")
 
@@ -302,6 +303,53 @@ async def import_local_pdf(
         raise ToolError(
             f"Could not import local PDF {file_path!r} into project {project_id!r}: "
             f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+
+@mcp.tool()
+async def save_draft_section(
+    project_id: str,
+    filename: str,
+    content: str,
+    order: int | None = None,
+) -> dict:
+    """Save or update a draft Markdown chapter (e.g. 01_abstract.md) in this project."""
+    try:
+        settings = get_settings()
+        conn = await get_connection(settings.db_path)
+        try:
+            project = await repository.get_project(conn, project_id)
+            return await draft_manager.write_draft_section(
+                conn, project_id, _project_dir(settings, project), filename, content, order
+            )
+        finally:
+            await conn.close()
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(
+            f"Could not save draft section {filename!r}: {type(exc).__name__}: {exc}"
+        ) from exc
+
+
+@mcp.tool()
+async def read_draft_section(project_id: str, filename: str) -> dict:
+    """Read a draft chapter's full Markdown content from this project."""
+    try:
+        settings = get_settings()
+        conn = await get_connection(settings.db_path)
+        try:
+            project = await repository.get_project(conn, project_id)
+            return await draft_manager.read_draft_section(
+                conn, project_id, _project_dir(settings, project), filename
+            )
+        finally:
+            await conn.close()
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(
+            f"Could not read draft section {filename!r}: {type(exc).__name__}: {exc}"
         ) from exc
 
 
