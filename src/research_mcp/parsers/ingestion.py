@@ -18,6 +18,7 @@ from research_mcp.db.repository import (
 )
 from research_mcp.models import PaperModel
 from research_mcp.parsers.pdf_extractor import (
+    MAX_PDF_BYTES,
     PdfMetadata,
     download_pdf,
     extract_markdown,
@@ -105,6 +106,7 @@ async def _make_paper(
     *,
     lookup_pdf_path: Path | None = None,
     bibtex: str | None = None,
+    paper_id: str | None = None,
 ) -> PaperModel:
     existing = await _existing_paper(
         conn,
@@ -129,7 +131,7 @@ async def _make_paper(
         )
     )
     return PaperModel(
-        id=existing.id if existing else uuid.uuid4().hex,
+        id=existing.id if existing else paper_id or uuid.uuid4().hex,
         project_id=project_id,
         citekey=citekey,
         doi=metadata.doi,
@@ -147,6 +149,8 @@ async def _make_paper(
 
 
 def _hash_file(path: Path) -> str:
+    if path.stat().st_size > MAX_PDF_BYTES:
+        raise ValueError(f"PDF size exceeds {MAX_PDF_BYTES} bytes")
     digest = hashlib.sha256()
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
@@ -258,6 +262,7 @@ async def ingest_remote_paper(
     warnings: list[str] = []
     bibtex = await _get_bibtex(metadata.doi, warnings)
     previous = await _existing_paper(conn, project_id, metadata.doi)
+    remote_paper_id = previous.id if previous else uuid.uuid4().hex
 
     pdf_path = Path(previous.pdf_path) if previous and previous.pdf_path else None
     sections: list[SectionData] | None = None
@@ -275,13 +280,12 @@ async def ingest_remote_paper(
         if pdf_url is None:
             warnings.append("No verified legal open-access PDF URL is available.")
         else:
-            paper_id = previous.id if previous else uuid.uuid4().hex
             project_pdf_dir = _safe_destination(project_dir / "pdfs", project_dir)
             staging_path = project_pdf_dir / f".download-{uuid.uuid4().hex}.pdf"
             try:
                 await download_pdf(pdf_url, staging_path, project_dir)
                 digest = _hash_file(staging_path)
-                artifact_stem = f"{paper_id}-{digest}"
+                artifact_stem = f"{remote_paper_id}-{digest}"
                 new_pdf_path = project_pdf_dir / f"{artifact_stem}.pdf"
                 new_markdown_path = project_dir / "parsed" / f"{artifact_stem}.md"
                 markdown = extract_markdown(staging_path, project_dir)
@@ -290,10 +294,14 @@ async def ingest_remote_paper(
                     warnings.append("PDF downloaded but no extractable text sections were found.")
                 else:
                     sections = parsed_sections
+                    markdown_existed = new_markdown_path.exists()
                     _write_markdown(new_markdown_path, project_dir, markdown)
-                    new_artifacts.append(new_markdown_path)
+                    if not markdown_existed:
+                        new_artifacts.append(new_markdown_path)
+                pdf_existed = new_pdf_path.exists()
                 os.replace(staging_path, new_pdf_path)
-                new_artifacts.append(new_pdf_path)
+                if not pdf_existed:
+                    new_artifacts.append(new_pdf_path)
                 pdf_path = new_pdf_path
                 download_status = "downloaded"
             except Exception as exc:
@@ -311,6 +319,7 @@ async def ingest_remote_paper(
         metadata,
         pdf_path,
         bibtex=bibtex,
+        paper_id=remote_paper_id,
     )
     try:
         saved = await save_paper_and_sections(conn, project_id, paper, sections)
@@ -403,11 +412,14 @@ async def ingest_local_pdf(
         markdown = extract_markdown(pdf_path, project_dir)
         sections = sectionize_markdown(markdown) if markdown.strip() else None
         if sections:
+            markdown_existed = markdown_path.exists()
             _write_markdown(markdown_path, project_dir, markdown)
         else:
+            markdown_existed = markdown_path.exists()
             warnings.append("PDF imported but no extractable text sections were found.")
     except Exception as exc:
         sections = None
+        markdown_existed = markdown_path.exists()
         warnings.append(f"PDF imported but parsing failed: {type(exc).__name__}: {exc}")
 
     paper = await _make_paper(
@@ -423,6 +435,7 @@ async def ingest_local_pdf(
     except Exception:
         if not pdf_existed:
             pdf_path.unlink(missing_ok=True)
+        if not markdown_existed:
             markdown_path.unlink(missing_ok=True)
         raise
     persisted_section_count = (

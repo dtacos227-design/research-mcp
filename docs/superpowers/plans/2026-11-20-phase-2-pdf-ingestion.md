@@ -245,7 +245,7 @@ For non-DOI identifiers, call `search_all` with all five searchable providers an
 - [ ] **Step 4: Run focused tests**
 
 Run: `uv run pytest tests/unit/test_ingestion.py -v`
-Expected: PASS (10 test cases; the local-metadata test has two parameter values).
+Expected: PASS (12 test cases; local metadata has two parameter cases, plus artifact rollback and oversized-hash regressions).
 
 - [ ] **Step 5: Commit**
 

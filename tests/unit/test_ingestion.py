@@ -13,12 +13,14 @@ from research_mcp.db.repository import (
     get_paper_by_pdf_path,
     search_sections,
 )
+from research_mcp.parsers import ingestion
 from research_mcp.parsers.ingestion import (
     IngestionError,
     ingest_local_pdf,
     ingest_remote_paper,
     resolve_identifier,
 )
+from research_mcp.parsers.pdf_extractor import MAX_PDF_BYTES
 from research_mcp.providers.aggregator import AggregatedSearch
 from research_mcp.providers.base import SearchResult, UnpaywallResult
 
@@ -312,6 +314,57 @@ async def test_reingest_same_doi_preserves_identity_and_replaces_sections(
     assert second["title"] == "Updated Study"
     assert old_hits == []
     assert len(new_hits) == 1
+
+
+@pytest.mark.asyncio
+async def test_failed_same_content_reingest_keeps_existing_artifacts(
+    db, monkeypatch: pytest.MonkeyPatch
+):
+    conn, project, workspace, _ = db
+    monkeypatch.setattr(
+        ingestion,
+        "get_by_doi",
+        AsyncMock(return_value=search_result()),
+    )
+    monkeypatch.setattr(
+        ingestion,
+        "get_oa_location",
+        AsyncMock(
+            return_value=UnpaywallResult(is_oa=True, pdf_url="https://repo.example.test/study.pdf")
+        ),
+    )
+    patch_download(monkeypatch)
+    patch_parser(monkeypatch, "# Abstract\nstable content")
+    first = await ingest_remote_paper(conn, project.id, workspace, "10.1/study", True)
+    stored = await get_paper_by_doi(conn, project.id, "10.1/study")
+    assert stored is not None
+    assert stored.id == first["id"]
+    existing_pdf = Path(first["pdf_path"])
+    existing_markdown = workspace / project.slug / "parsed" / f"{existing_pdf.stem}.md"
+    pdf_bytes = existing_pdf.read_bytes()
+    markdown_text = existing_markdown.read_text(encoding="utf-8")
+    failing_save = AsyncMock(side_effect=RuntimeError("simulated database failure"))
+    monkeypatch.setattr(ingestion, "save_paper_and_sections", failing_save)
+
+    with pytest.raises(RuntimeError, match="simulated database failure"):
+        await ingest_remote_paper(conn, project.id, workspace, "10.1/study", True)
+
+    attempted_paper = failing_save.await_args.args[2]
+    assert attempted_paper.id == first["id"]
+    assert attempted_paper.pdf_path == str(existing_pdf)
+    assert existing_pdf.exists()
+    assert existing_pdf.read_bytes() == pdf_bytes
+    assert existing_markdown.exists()
+    assert existing_markdown.read_text(encoding="utf-8") == markdown_text
+
+
+def test_hash_file_rejects_oversized_input_before_reading(tmp_path: Path):
+    oversized = tmp_path / "oversized.pdf"
+    with oversized.open("wb") as stream:
+        stream.truncate(MAX_PDF_BYTES + 1)
+
+    with pytest.raises(ValueError, match="size"):
+        ingestion._hash_file(oversized)
 
 
 @pytest.mark.asyncio
