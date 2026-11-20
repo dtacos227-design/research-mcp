@@ -177,6 +177,64 @@ async def resolve_doi(doi: str) -> dict:
         raise ToolError(f"{type(exc).__name__}: {exc}") from exc
 
 
+@mcp.tool()
+async def list_paper_sections(project_id: str, citekey: str) -> list[dict]:
+    """List a paper's extracted section headings and word counts."""
+    try:
+        conn = await get_connection(get_settings().db_path)
+        try:
+            return await repository.list_sections(conn, project_id, citekey)
+        finally:
+            await conn.close()
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(
+            f"Could not list sections for citekey {citekey!r}: {type(exc).__name__}: {exc}"
+        ) from exc
+
+
+@mcp.tool()
+async def read_paper_section(
+    project_id: str,
+    citekey: str,
+    section_name: str,
+) -> dict:
+    """Read only the requested section from a paper stored in this project."""
+    try:
+        conn = await get_connection(get_settings().db_path)
+        try:
+            return await repository.get_section(conn, project_id, citekey, section_name)
+        finally:
+            await conn.close()
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(
+            f"Could not read section {section_name!r} for citekey {citekey!r}: "
+            f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+
+@mcp.tool()
+async def search_local_library(
+    project_id: str,
+    query: str,
+    limit: int = 10,
+) -> list[dict]:
+    """Search the project's local PDF sections and return brief snippets."""
+    try:
+        conn = await get_connection(get_settings().db_path)
+        try:
+            return await repository.search_sections(conn, project_id, query, limit)
+        finally:
+            await conn.close()
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(f"Could not search the local library: {type(exc).__name__}: {exc}") from exc
+
+
 def main() -> None:
     settings = get_settings()
     configure_logging(settings.log_level)
