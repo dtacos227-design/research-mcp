@@ -185,6 +185,60 @@ async def get_paper_by_citekey(
     return await _get_paper(conn, project_id, "citekey", citekey)
 
 
+async def list_papers(
+    conn: aiosqlite.Connection,
+    project_id: str,
+) -> list[PaperModel]:
+    """Return every paper in a project, ordered by citekey."""
+    async with conn.execute(
+        """
+        SELECT id, project_id, citekey, doi, title, authors_json, year, venue, abstract,
+               citation_count, pdf_path, source_provider, external_id, item_type,
+               authors_structured_json, bibtex_raw, csl_json, created_at
+        FROM papers
+        WHERE project_id = ?
+        ORDER BY citekey
+        """,
+        (project_id,),
+    ) as cursor:
+        rows = await cursor.fetchall()
+    return [
+        PaperModel(
+            id=row[0],
+            project_id=row[1],
+            citekey=row[2],
+            doi=row[3],
+            title=row[4],
+            authors=json.loads(row[5]),
+            year=row[6],
+            venue=row[7],
+            abstract=row[8],
+            citation_count=row[9],
+            pdf_path=row[10],
+            source_provider=row[11],
+            external_id=row[12],
+            item_type=row[13],
+            authors_structured=json.loads(row[14]) if row[14] else None,
+            bibtex_raw=row[15],
+            csl_json=row[16],
+            created_at=row[17],
+        )
+        for row in rows
+    ]
+
+
+async def set_paper_csl_json(
+    conn: aiosqlite.Connection,
+    paper_id: str,
+    csl_json: str,
+) -> None:
+    """Write a paper's individual CSL-JSON object back to its row."""
+    await conn.execute(
+        "UPDATE papers SET csl_json = ? WHERE id = ?",
+        (csl_json, paper_id),
+    )
+
+
 async def get_paper_by_pdf_path(
     conn: aiosqlite.Connection,
     project_id: str,

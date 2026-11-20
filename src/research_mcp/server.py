@@ -1,3 +1,4 @@
+import json
 import re
 from pathlib import Path
 from typing import Literal
@@ -5,10 +6,16 @@ from typing import Literal
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
+from research_mcp.citations.bibtex import build_bibtex_entry, build_csl_entry
+from research_mcp.citations.verifier import diff_citations, extract_citekeys
 from research_mcp.config import configure_logging, get_settings
 from research_mcp.db import repository
 from research_mcp.db.database import get_connection
-from research_mcp.parsers.ingestion import ingest_local_pdf, ingest_remote_paper
+from research_mcp.parsers.ingestion import (
+    _safe_destination,
+    ingest_local_pdf,
+    ingest_remote_paper,
+)
 from research_mcp.providers.aggregator import search_all
 from research_mcp.providers.crossref import get_bibtex, get_by_doi
 from research_mcp.providers.semantic_scholar import get_citations, get_references
