@@ -145,6 +145,11 @@ async def _make_paper(
         doi=metadata.doi,
         title=metadata.title or "Untitled paper",
         authors=metadata.authors,
+        authors_structured=(
+            [a.model_dump() for a in metadata.authors_structured]
+            if metadata.authors_structured
+            else None
+        ),
         year=metadata.year,
         venue=metadata.venue,
         abstract=metadata.abstract,
@@ -152,6 +157,7 @@ async def _make_paper(
         pdf_path=str(pdf_path) if pdf_path is not None else None,
         source_provider=metadata.source_provider,
         external_id=metadata.external_id,
+        item_type=metadata.item_type,
         bibtex_raw=bibtex,
         created_at=existing.created_at if existing else datetime.now(UTC).isoformat(),
     )

@@ -19,6 +19,7 @@ class PaperModel(BaseModel):
     doi: str | None = None
     title: str
     authors: list[str]
+    authors_structured: list[dict] | None = None
     year: int | None = None
     venue: str | None = None
     abstract: str | None = None
@@ -26,6 +27,7 @@ class PaperModel(BaseModel):
     pdf_path: str | None = None
     source_provider: str | None = None
     external_id: str | None = None
+    item_type: str = "other"
     bibtex_raw: str | None = None
     csl_json: str | None = None
     created_at: str

@@ -9,12 +9,19 @@ from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt,
 RETRY_STATUS_CODES = {429, 503}
 
 
+class AuthorName(BaseModel):
+    given: str | None = None
+    family: str | None = None
+    literal: str | None = None
+
+
 class SearchResult(BaseModel):
     source_provider: str
     external_id: str
     doi: str | None = None
     title: str
     authors: list[str] = Field(default_factory=list)
+    authors_structured: list[AuthorName] | None = None
     year: int | None = None
     venue: str | None = None
     abstract: str | None = None

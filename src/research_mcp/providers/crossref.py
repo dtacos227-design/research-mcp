@@ -4,6 +4,7 @@ import httpx
 
 from research_mcp.config import get_settings
 from research_mcp.providers.base import (
+    AuthorName,
     LiteratureProvider,
     SearchResult,
     normalize_item_type,
@@ -31,6 +32,13 @@ def _map_item(item: dict) -> SearchResult:
         for a in item.get("author") or []
         if a.get("given") or a.get("family")
     ]
+    authors_structured = [
+        AuthorName(given=a.get("given"), family=a.get("family"))
+        if (a.get("given") and a.get("family"))
+        else AuthorName(literal=a.get("family") or a.get("given"))
+        for a in item.get("author") or []
+        if a.get("given") or a.get("family")
+    ]
     pdf_url = next(
         (
             link["URL"]
@@ -45,6 +53,7 @@ def _map_item(item: dict) -> SearchResult:
         doi=doi,
         title=titles[0] if titles else "",
         authors=authors,
+        authors_structured=authors_structured or None,
         year=_year(item),
         venue=venues[0] if venues else None,
         citation_count=item.get("is-referenced-by-count") or 0,

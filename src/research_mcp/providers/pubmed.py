@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 import httpx
 
 from research_mcp.providers.base import (
+    AuthorName,
     LiteratureProvider,
     SearchResult,
     normalize_item_type,
@@ -24,6 +25,18 @@ def _pick_publication_type(types: list[str]) -> str:
         if candidate in types:
             return candidate
     return types[0] if types else ""
+
+
+def _structured_author(author_el: ET.Element) -> AuthorName:
+    collective = author_el.find("CollectiveName")
+    if collective is not None and collective.text:
+        return AuthorName(literal=collective.text)
+    fore = author_el.find("ForeName")
+    last = author_el.find("LastName")
+    return AuthorName(
+        given=(fore.text or None) if fore is not None else None,
+        family=(last.text or None) if last is not None else None,
+    )
 
 
 def _author_name(author_el: ET.Element) -> str:
@@ -55,6 +68,7 @@ def _to_result(pubmed_article: ET.Element) -> SearchResult:
     venue = _inner_text(article.find("Journal/Title"))
     pmid = _inner_text(citation.find("PMID"))
     names = [_author_name(a) for a in article.findall("AuthorList/Author")]
+    structured = [_structured_author(a) for a in article.findall("AuthorList/Author")]
     publication_types = [
         _inner_text(pt) for pt in article.findall("PublicationTypeList/PublicationType")
     ]
@@ -65,6 +79,7 @@ def _to_result(pubmed_article: ET.Element) -> SearchResult:
         doi=(doi_el.text or "").strip() or None if doi_el is not None else None,
         title=_inner_text(article.find("ArticleTitle")),
         authors=[n for n in names if n],
+        authors_structured=structured or None,
         year=int(year_text) if year_text.isdigit() else None,
         venue=venue or None,
         abstract=abstract or None,

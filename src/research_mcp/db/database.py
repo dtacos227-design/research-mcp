@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS papers (
     pdf_path TEXT,
     source_provider TEXT,
     external_id TEXT,
+    item_type TEXT,
+    authors_structured_json TEXT,
     bibtex_raw TEXT,
     csl_json TEXT,
     created_at TEXT NOT NULL,
@@ -84,12 +86,20 @@ CREATE TABLE IF NOT EXISTS draft_sections (
 
 
 async def _migrate_legacy_schema(conn: aiosqlite.Connection) -> None:
-    """Add columns to a papers table created before this column existed."""
+    """Add columns to a papers table created before these columns existed."""
     async with conn.execute("PRAGMA table_info(papers)") as cursor:
         columns = {row[1] async for row in cursor}
-    if columns and "external_id" not in columns:
-        await conn.execute("ALTER TABLE papers ADD COLUMN external_id TEXT")
-        await conn.commit()
+    if not columns:
+        return
+    additions = {
+        "external_id": "TEXT",
+        "item_type": "TEXT",
+        "authors_structured_json": "TEXT",
+    }
+    for column, column_type in additions.items():
+        if column not in columns:
+            await conn.execute(f"ALTER TABLE papers ADD COLUMN {column} {column_type}")
+    await conn.commit()
 
 
 async def get_connection(db_path: Path) -> aiosqlite.Connection:

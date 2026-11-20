@@ -137,8 +137,8 @@ async def _get_paper(
     async with conn.execute(
         f"""
         SELECT id, project_id, citekey, doi, title, authors_json, year, venue, abstract,
-               citation_count, pdf_path, source_provider, external_id, bibtex_raw, csl_json,
-               created_at
+               citation_count, pdf_path, source_provider, external_id, item_type,
+               authors_structured_json, bibtex_raw, csl_json, created_at
         FROM papers
         WHERE project_id = ? AND {where_clause} = ?
         """,
@@ -161,9 +161,11 @@ async def _get_paper(
         pdf_path=row[10],
         source_provider=row[11],
         external_id=row[12],
-        bibtex_raw=row[13],
-        csl_json=row[14],
-        created_at=row[15],
+        item_type=row[13],
+        authors_structured=json.loads(row[14]) if row[14] else None,
+        bibtex_raw=row[15],
+        csl_json=row[16],
+        created_at=row[17],
     )
 
 
@@ -200,8 +202,8 @@ async def get_paper_by_external_id(
     async with conn.execute(
         """
         SELECT id, project_id, citekey, doi, title, authors_json, year, venue, abstract,
-               citation_count, pdf_path, source_provider, external_id, bibtex_raw, csl_json,
-               created_at
+               citation_count, pdf_path, source_provider, external_id, item_type,
+               authors_structured_json, bibtex_raw, csl_json, created_at
         FROM papers
         WHERE project_id = ? AND source_provider = ? AND external_id = ?
         """,
@@ -224,9 +226,11 @@ async def get_paper_by_external_id(
         pdf_path=row[10],
         source_provider=row[11],
         external_id=row[12],
-        bibtex_raw=row[13],
-        csl_json=row[14],
-        created_at=row[15],
+        item_type=row[13],
+        authors_structured=json.loads(row[14]) if row[14] else None,
+        bibtex_raw=row[15],
+        csl_json=row[16],
+        created_at=row[17],
     )
 
 
@@ -265,9 +269,9 @@ async def save_paper_and_sections(
                 """
                 INSERT INTO papers (
                     id, project_id, citekey, doi, title, authors_json, year, venue, abstract,
-                    citation_count, pdf_path, source_provider, external_id, bibtex_raw, csl_json,
-                    created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    citation_count, pdf_path, source_provider, external_id, item_type,
+                    authors_structured_json, bibtex_raw, csl_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     stored.id,
@@ -283,6 +287,10 @@ async def save_paper_and_sections(
                     stored.pdf_path,
                     stored.source_provider,
                     stored.external_id,
+                    stored.item_type,
+                    json.dumps(stored.authors_structured, ensure_ascii=False)
+                    if stored.authors_structured
+                    else None,
                     stored.bibtex_raw,
                     stored.csl_json,
                     stored.created_at,
@@ -294,7 +302,7 @@ async def save_paper_and_sections(
                 UPDATE papers
                 SET doi = ?, title = ?, authors_json = ?, year = ?, venue = ?, abstract = ?,
                     citation_count = ?, pdf_path = ?, source_provider = ?, external_id = ?,
-                    bibtex_raw = ?, csl_json = ?
+                    item_type = ?, authors_structured_json = ?, bibtex_raw = ?, csl_json = ?
                 WHERE id = ? AND project_id = ?
                 """,
                 (
@@ -308,6 +316,10 @@ async def save_paper_and_sections(
                     stored.pdf_path,
                     stored.source_provider,
                     stored.external_id,
+                    stored.item_type,
+                    json.dumps(stored.authors_structured, ensure_ascii=False)
+                    if stored.authors_structured
+                    else None,
                     stored.bibtex_raw,
                     stored.csl_json,
                     stored.id,
