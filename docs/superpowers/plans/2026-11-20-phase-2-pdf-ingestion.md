@@ -240,12 +240,12 @@ Expected: FAIL with module import error.
 
 - [ ] **Step 3: Implement ingestion orchestration**
 
-For non-DOI identifiers, call `search_all` with all five searchable providers and a bounded limit, then require exact `external_id` match. For DOI identifiers, obtain authoritative Crossref metadata. Only allow auto-download for Unpaywall positive OA PDF, arXiv PDF, or Semantic Scholar `openAccessPdf`; otherwise persist metadata-only with `sections=None` so an existing parsed library is not erased. DOI/provider artifacts use `pdfs/{paper_id}-{sha256}.pdf` and `parsed/{paper_id}-{sha256}.md`; a local no-DOI import uses `pdfs/local-{sha256}.pdf` and `parsed/local-{sha256}.md`, allowing lookup of an already-imported identical file before creating a new paper id. Pass every destination through project-root containment validation. For local PDF metadata, use provided DOI's Crossref data when available; otherwise use `extract_pdf_metadata` and filename fallback without inventing author/year. Return `download_status` (`downloaded`, `skipped`, `unavailable`) and warnings with the paper model fields and section count.
+For non-DOI identifiers, call `search_all` with all five searchable providers and a bounded limit, then require exact `external_id` match. For DOI identifiers, obtain authoritative Crossref metadata. Only allow auto-download for Unpaywall positive OA PDF, arXiv PDF, or Semantic Scholar `openAccessPdf`; otherwise persist metadata-only with `sections=None` so an existing parsed library is not erased. DOI/provider artifacts use `pdfs/{paper_id}-{sha256}.pdf` and `parsed/{paper_id}-{sha256}.md`; a local no-DOI import uses `pdfs/local-{sha256}.pdf` and `parsed/local-{sha256}.md`, allowing lookup of an already-imported identical file before creating a new paper id. Pass every destination through project-root containment validation. For local PDF metadata, use provided DOI's Crossref data when available; otherwise use `extract_pdf_metadata` and filename fallback without inventing author/year. Remote ingestion returns `download_status` (`downloaded`, `skipped`, `unavailable`); local import returns `import_status=\"imported\"` and `download_status=\"not_applicable\"`. Both return warnings, paper fields, and section count.
 
 - [ ] **Step 4: Run focused tests**
 
 Run: `uv run pytest tests/unit/test_ingestion.py -v`
-Expected: PASS (9 tests).
+Expected: PASS (10 test cases; the local-metadata test has two parameter values).
 
 - [ ] **Step 5: Commit**
 
