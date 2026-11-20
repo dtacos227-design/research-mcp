@@ -5,12 +5,28 @@ import httpx
 from research_mcp.providers.base import (
     LiteratureProvider,
     SearchResult,
+    normalize_item_type,
     polite_headers,
     request_with_retry,
 )
 
 SEMANTIC_SCHOLAR_BASE_URL = "https://api.semanticscholar.org/graph/v1"
-PAPER_FIELDS = "title,abstract,year,authors,externalIds,citationCount,openAccessPdf,venue"
+PAPER_FIELDS = (
+    "title,abstract,year,authors,externalIds,citationCount,openAccessPdf,venue,publicationTypes"
+)
+
+# Priority scan over a multi-valued publicationTypes list: pick the most
+# specific/informative type, not the first in API order (spec §6b.2).
+_S2_TYPE_PRIORITY = ("Review", "Conference", "JournalArticle", "Dataset")
+
+
+def _pick_publication_type(types: list[str] | None) -> str:
+    if not types:
+        return ""
+    for candidate in _S2_TYPE_PRIORITY:
+        if candidate in types:
+            return candidate
+    return types[0]
 
 
 def _map_paper(paper: dict) -> SearchResult:
@@ -25,6 +41,10 @@ def _map_paper(paper: dict) -> SearchResult:
         abstract=paper.get("abstract"),
         citation_count=paper.get("citationCount") or 0,
         pdf_url=(paper.get("openAccessPdf") or {}).get("url"),
+        item_type=normalize_item_type(
+            SemanticScholarProvider.name,
+            _pick_publication_type(paper.get("publicationTypes")),
+        ),
     )
 
 

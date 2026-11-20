@@ -6,6 +6,7 @@ from research_mcp.config import get_settings
 from research_mcp.providers.base import (
     LiteratureProvider,
     SearchResult,
+    normalize_item_type,
     polite_headers,
     request_with_retry,
 )
@@ -49,6 +50,7 @@ def _map_item(item: dict) -> SearchResult:
         citation_count=item.get("is-referenced-by-count") or 0,
         pdf_url=pdf_url,
         landing_page_url=item.get("URL"),
+        item_type=normalize_item_type(CrossrefProvider.name, item.get("type") or ""),
     )
 
 

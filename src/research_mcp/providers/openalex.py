@@ -4,6 +4,7 @@ from research_mcp.config import get_settings
 from research_mcp.providers.base import (
     LiteratureProvider,
     SearchResult,
+    normalize_item_type,
     polite_headers,
     request_with_retry,
 )
@@ -48,6 +49,7 @@ def _to_result(work: dict) -> SearchResult:
         citation_count=work.get("cited_by_count") or 0,
         pdf_url=location.get("pdf_url"),
         landing_page_url=location.get("landing_page_url"),
+        item_type=normalize_item_type(OpenAlexProvider.name, work.get("type") or ""),
     )
 
 

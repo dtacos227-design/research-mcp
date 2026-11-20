@@ -3,10 +3,27 @@ import xml.etree.ElementTree as ET
 
 import httpx
 
-from research_mcp.providers.base import LiteratureProvider, SearchResult, request_with_retry
+from research_mcp.providers.base import (
+    LiteratureProvider,
+    SearchResult,
+    normalize_item_type,
+    request_with_retry,
+)
 
 ESEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 EFETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+
+
+# Priority scan over a multi-valued PublicationTypeList: prefer the most
+# specific/informative type, not the first in API order (spec §6b.2).
+_PUBMED_TYPE_PRIORITY = ("Review", "Journal Article")
+
+
+def _pick_publication_type(types: list[str]) -> str:
+    for candidate in _PUBMED_TYPE_PRIORITY:
+        if candidate in types:
+            return candidate
+    return types[0] if types else ""
 
 
 def _author_name(author_el: ET.Element) -> str:
@@ -38,6 +55,10 @@ def _to_result(pubmed_article: ET.Element) -> SearchResult:
     venue = _inner_text(article.find("Journal/Title"))
     pmid = _inner_text(citation.find("PMID"))
     names = [_author_name(a) for a in article.findall("AuthorList/Author")]
+    publication_types = [
+        _inner_text(pt) for pt in article.findall("PublicationTypeList/PublicationType")
+    ]
+    raw_type = _pick_publication_type(publication_types)
     return SearchResult(
         source_provider=PubmedProvider.name,
         external_id=pmid,
@@ -48,6 +69,7 @@ def _to_result(pubmed_article: ET.Element) -> SearchResult:
         venue=venue or None,
         abstract=abstract or None,
         landing_page_url=f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/" if pmid else None,
+        item_type=normalize_item_type(PubmedProvider.name, raw_type),
     )
 
 

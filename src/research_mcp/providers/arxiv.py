@@ -36,6 +36,7 @@ def _to_result(entry: ET.Element) -> SearchResult:
         abstract=_text(entry, "summary") or None,
         pdf_url=pdf_url,
         landing_page_url=entry_id or None,
+        item_type="preprint",
     )
 
 

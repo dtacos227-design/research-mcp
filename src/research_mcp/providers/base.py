@@ -21,6 +21,64 @@ class SearchResult(BaseModel):
     citation_count: int = 0
     pdf_url: str | None = None
     landing_page_url: str | None = None
+    item_type: str = "other"
+
+
+ITEM_TYPE_VOCABULARY = frozenset(
+    {
+        "journal-article",
+        "proceedings-article",
+        "book-chapter",
+        "preprint",
+        "dataset",
+        "report",
+        "review",
+        "other",
+    }
+)
+
+# Per-provider raw-value -> normalized item_type mapping (spec §1). Multi-valued
+# providers (PubMed, Semantic Scholar) are expected to select a single raw value
+# by priority scan BEFORE calling this function; it maps one raw string, not a
+# list.
+_ITEM_TYPE_MAP: dict[str, dict[str, str]] = {
+    "openalex": {
+        "article": "journal-article",
+        "preprint": "preprint",
+        "book-chapter": "book-chapter",
+        "dataset": "dataset",
+        "report": "report",
+        "review": "review",
+    },
+    "crossref": {
+        "journal-article": "journal-article",
+        "proceedings-article": "proceedings-article",
+        "book-chapter": "book-chapter",
+        "dataset": "dataset",
+        "report": "report",
+        "monograph": "report",
+        "posted-content": "preprint",
+        "preprint": "preprint",
+    },
+    "semantic_scholar": {
+        "JournalArticle": "journal-article",
+        "Conference": "proceedings-article",
+        "Review": "review",
+        "Dataset": "dataset",
+    },
+    "pubmed": {
+        "Journal Article": "journal-article",
+        "Review": "review",
+    },
+}
+
+
+def normalize_item_type(source_provider: str, raw_type: str) -> str:
+    """Map a provider's raw publication-type value to our closed vocabulary."""
+    if not raw_type:
+        return "other"
+    mapped = _ITEM_TYPE_MAP.get(source_provider, {}).get(raw_type)
+    return mapped if mapped in ITEM_TYPE_VOCABULARY else "other"
 
 
 class UnpaywallResult(BaseModel):
