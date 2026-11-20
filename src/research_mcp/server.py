@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 from typing import Literal
 
 from mcp.server.mcpserver import MCPServer
@@ -7,6 +8,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from research_mcp.config import configure_logging, get_settings
 from research_mcp.db import repository
 from research_mcp.db.database import get_connection
+from research_mcp.parsers.ingestion import ingest_local_pdf, ingest_remote_paper
 from research_mcp.providers.aggregator import search_all
 from research_mcp.providers.crossref import get_bibtex, get_by_doi
 from research_mcp.providers.semantic_scholar import get_citations, get_references
@@ -233,6 +235,66 @@ async def search_local_library(
         raise
     except Exception as exc:
         raise ToolError(f"Could not search the local library: {type(exc).__name__}: {exc}") from exc
+
+
+@mcp.tool()
+async def save_paper_to_project(
+    project_id: str,
+    identifier: str,
+    download_pdf: bool = True,
+) -> dict:
+    """Save paper metadata and optionally download and parse a verified OA PDF."""
+    try:
+        settings = get_settings()
+        conn = await get_connection(settings.db_path)
+        try:
+            await repository.get_project(conn, project_id)
+            return await ingest_remote_paper(
+                conn,
+                project_id,
+                settings.workspace_dir,
+                identifier,
+                download_pdf,
+            )
+        finally:
+            await conn.close()
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(
+            f"Could not save paper {identifier!r} to project {project_id!r}: "
+            f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+
+@mcp.tool()
+async def import_local_pdf(
+    project_id: str,
+    file_path: str,
+    doi: str | None = None,
+) -> dict:
+    """Import a user-owned local PDF and index its extracted sections."""
+    try:
+        settings = get_settings()
+        conn = await get_connection(settings.db_path)
+        try:
+            await repository.get_project(conn, project_id)
+            return await ingest_local_pdf(
+                conn,
+                project_id,
+                settings.workspace_dir,
+                Path(file_path).expanduser(),
+                doi,
+            )
+        finally:
+            await conn.close()
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(
+            f"Could not import local PDF {file_path!r} into project {project_id!r}: "
+            f"{type(exc).__name__}: {exc}"
+        ) from exc
 
 
 def main() -> None:
