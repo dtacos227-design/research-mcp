@@ -11,6 +11,7 @@ dependencies = [
     "tenacity>=9.0",
     "aiosqlite>=0.20",
     "pymupdf4llm>=0.0.17",
+    "bibtexparser>=2.1.0",
 ]
 
 [project.scripts]
