@@ -1,4 +1,5 @@
 import itertools
+import json
 import re
 import sqlite3
 import uuid
@@ -7,12 +8,21 @@ from pathlib import Path
 
 import aiosqlite
 
-from research_mcp.models import ProjectModel
+from research_mcp.models import PaperModel, ProjectModel
+from research_mcp.parsers.sectionizer import SectionData
 
 WORKSPACE_SUBDIRS = ("pdfs", "parsed", "drafts", "assets", "scripts", "exports")
 
 
 class ProjectNotFoundError(Exception):
+    pass
+
+
+class PaperNotFoundError(Exception):
+    pass
+
+
+class SectionNotFoundError(Exception):
     pass
 
 
@@ -115,4 +125,264 @@ async def list_projects(conn: aiosqlite.Connection) -> list[dict]:
             "draft_count": r[7],
         }
         for r in rows
+    ]
+
+
+async def _get_paper(
+    conn: aiosqlite.Connection,
+    project_id: str,
+    where_clause: str,
+    value: str,
+) -> PaperModel | None:
+    async with conn.execute(
+        f"""
+        SELECT id, project_id, citekey, doi, title, authors_json, year, venue, abstract,
+               citation_count, pdf_path, source_provider, bibtex_raw, csl_json, created_at
+        FROM papers
+        WHERE project_id = ? AND {where_clause} = ?
+        """,
+        (project_id, value),
+    ) as cursor:
+        row = await cursor.fetchone()
+    if row is None:
+        return None
+    return PaperModel(
+        id=row[0],
+        project_id=row[1],
+        citekey=row[2],
+        doi=row[3],
+        title=row[4],
+        authors=json.loads(row[5]),
+        year=row[6],
+        venue=row[7],
+        abstract=row[8],
+        citation_count=row[9],
+        pdf_path=row[10],
+        source_provider=row[11],
+        bibtex_raw=row[12],
+        csl_json=row[13],
+        created_at=row[14],
+    )
+
+
+async def get_paper_by_doi(
+    conn: aiosqlite.Connection,
+    project_id: str,
+    doi: str,
+) -> PaperModel | None:
+    return await _get_paper(conn, project_id, "doi", doi)
+
+
+async def get_paper_by_citekey(
+    conn: aiosqlite.Connection,
+    project_id: str,
+    citekey: str,
+) -> PaperModel | None:
+    return await _get_paper(conn, project_id, "citekey", citekey)
+
+
+async def get_paper_by_pdf_path(
+    conn: aiosqlite.Connection,
+    project_id: str,
+    pdf_path: str,
+) -> PaperModel | None:
+    return await _get_paper(conn, project_id, "pdf_path", pdf_path)
+
+
+async def save_paper_and_sections(
+    conn: aiosqlite.Connection,
+    project_id: str,
+    paper: PaperModel,
+    sections: list[SectionData] | None,
+) -> PaperModel:
+    await get_project(conn, project_id)
+    existing = await get_paper_by_doi(conn, project_id, paper.doi) if paper.doi else None
+    if existing is None and paper.pdf_path:
+        existing = await get_paper_by_pdf_path(conn, project_id, paper.pdf_path)
+
+    if existing is not None:
+        stored = paper.model_copy(
+            update={
+                "id": existing.id,
+                "project_id": project_id,
+                "citekey": existing.citekey,
+                "created_at": existing.created_at,
+                "pdf_path": paper.pdf_path or existing.pdf_path,
+            }
+        )
+    else:
+        stored = paper.model_copy(update={"project_id": project_id})
+
+    try:
+        await conn.execute("BEGIN")
+        if existing is None:
+            await conn.execute(
+                """
+                INSERT INTO papers (
+                    id, project_id, citekey, doi, title, authors_json, year, venue, abstract,
+                    citation_count, pdf_path, source_provider, bibtex_raw, csl_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    stored.id,
+                    project_id,
+                    stored.citekey,
+                    stored.doi,
+                    stored.title,
+                    json.dumps(stored.authors, ensure_ascii=False),
+                    stored.year,
+                    stored.venue,
+                    stored.abstract,
+                    stored.citation_count,
+                    stored.pdf_path,
+                    stored.source_provider,
+                    stored.bibtex_raw,
+                    stored.csl_json,
+                    stored.created_at,
+                ),
+            )
+        else:
+            await conn.execute(
+                """
+                UPDATE papers
+                SET doi = ?, title = ?, authors_json = ?, year = ?, venue = ?, abstract = ?,
+                    citation_count = ?, pdf_path = ?, source_provider = ?, bibtex_raw = ?,
+                    csl_json = ?
+                WHERE id = ? AND project_id = ?
+                """,
+                (
+                    stored.doi,
+                    stored.title,
+                    json.dumps(stored.authors, ensure_ascii=False),
+                    stored.year,
+                    stored.venue,
+                    stored.abstract,
+                    stored.citation_count,
+                    stored.pdf_path,
+                    stored.source_provider,
+                    stored.bibtex_raw,
+                    stored.csl_json,
+                    stored.id,
+                    project_id,
+                ),
+            )
+
+        if sections is not None:
+            await conn.execute("DELETE FROM paper_sections WHERE paper_id = ?", (stored.id,))
+            for item in sections:
+                await conn.execute(
+                    """
+                    INSERT INTO paper_sections (
+                        paper_id, section_order, heading, content, word_count
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        stored.id,
+                        item.section_order,
+                        item.heading,
+                        item.content,
+                        item.word_count,
+                    ),
+                )
+        await conn.commit()
+    except BaseException:
+        await conn.rollback()
+        raise
+    return stored
+
+
+async def list_sections(
+    conn: aiosqlite.Connection,
+    project_id: str,
+    citekey: str,
+) -> list[dict]:
+    await get_project(conn, project_id)
+    paper = await get_paper_by_citekey(conn, project_id, citekey)
+    if paper is None:
+        raise PaperNotFoundError(f"Paper with citekey {citekey!r} was not found.")
+    async with conn.execute(
+        """
+        SELECT section_order, heading, word_count
+        FROM paper_sections
+        WHERE paper_id = ?
+        ORDER BY section_order, id
+        """,
+        (paper.id,),
+    ) as cursor:
+        rows = await cursor.fetchall()
+    return [{"section_order": row[0], "heading": row[1], "word_count": row[2]} for row in rows]
+
+
+async def get_section(
+    conn: aiosqlite.Connection,
+    project_id: str,
+    citekey: str,
+    section_name: str,
+) -> dict:
+    await get_project(conn, project_id)
+    paper = await get_paper_by_citekey(conn, project_id, citekey)
+    if paper is None:
+        raise PaperNotFoundError(f"Paper with citekey {citekey!r} was not found.")
+
+    normalized_name = " ".join(section_name.casefold().split())
+    async with conn.execute(
+        """
+        SELECT section_order, heading, content, word_count
+        FROM paper_sections
+        WHERE paper_id = ?
+        ORDER BY section_order, id
+        """,
+        (paper.id,),
+    ) as cursor:
+        rows = await cursor.fetchall()
+    matches = [row for row in rows if " ".join(row[1].casefold().split()) == normalized_name]
+    if not matches:
+        raise SectionNotFoundError(
+            f"Section {section_name!r} was not found for citekey {citekey!r}."
+        )
+    if len(matches) > 1:
+        raise SectionNotFoundError(
+            f"Section {section_name!r} is ambiguous for citekey {citekey!r}."
+        )
+    row = matches[0]
+    return {
+        "section_order": row[0],
+        "heading": row[1],
+        "content": row[2],
+        "word_count": row[3],
+    }
+
+
+async def search_sections(
+    conn: aiosqlite.Connection,
+    project_id: str,
+    query: str,
+    limit: int,
+) -> list[dict]:
+    await get_project(conn, project_id)
+    tokens = re.findall(r"\w+", query, flags=re.UNICODE)
+    if not tokens:
+        raise ValueError("Search query must contain at least one word")
+    match_query = " AND ".join(f'"{token.replace(chr(34), chr(34) * 2)}"' for token in tokens)
+    async with conn.execute(
+        """
+        SELECT p.citekey, f.heading, f.paper_id,
+               snippet(paper_sections_fts, 1, '', '', ' … ', 30)
+        FROM paper_sections_fts AS f
+        JOIN papers AS p ON p.id = f.paper_id
+        WHERE f.project_id = ? AND paper_sections_fts MATCH ?
+        ORDER BY bm25(paper_sections_fts)
+        LIMIT ?
+        """,
+        (project_id, match_query, limit),
+    ) as cursor:
+        rows = await cursor.fetchall()
+    return [
+        {
+            "citekey": row[0],
+            "heading": row[1],
+            "paper_id": row[2],
+            "snippet": row[3][:300],
+        }
+        for row in rows
     ]
