@@ -93,7 +93,7 @@ async def _migrate_legacy_schema(conn: aiosqlite.Connection) -> None:
         return
     additions = {
         "external_id": "TEXT",
-        "item_type": "TEXT",
+        "item_type": "TEXT DEFAULT 'other'",
         "authors_structured_json": "TEXT",
     }
     for column, column_type in additions.items():

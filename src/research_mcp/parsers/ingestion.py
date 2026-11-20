@@ -220,6 +220,8 @@ def _metadata_from_local_pdf(
         citation_count=crossref.citation_count if crossref else 0,
         pdf_url=None,
         landing_page_url=crossref.landing_page_url if crossref else None,
+        item_type=crossref.item_type if crossref else "other",
+        authors_structured=crossref.authors_structured if crossref else None,
     )
 
 

@@ -1,6 +1,8 @@
+import aiosqlite
 import pytest
 
 from research_mcp.config import Settings
+from research_mcp.db import repository
 from research_mcp.db.database import get_connection
 
 
@@ -33,6 +35,55 @@ async def test_get_connection_is_idempotent_across_calls(tmp_path):
     await conn1.close()
     conn2 = await get_connection(db_path)  # must not raise on existing schema
     await conn2.close()
+
+
+@pytest.mark.asyncio
+async def test_legacy_papers_without_item_type_read_as_other(tmp_path):
+    """A Fase-1/2 DB has papers but no item_type column; after migration the
+    existing rows must read back as item_type='other', not crash the model."""
+    db_path = tmp_path / "legacy.db"
+    legacy = await aiosqlite.connect(db_path)
+    await legacy.executescript(
+        """
+        CREATE TABLE papers (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            citekey TEXT NOT NULL,
+            doi TEXT,
+            title TEXT NOT NULL,
+            authors_json TEXT NOT NULL,
+            year INTEGER,
+            venue TEXT,
+            abstract TEXT,
+            citation_count INTEGER DEFAULT 0,
+            pdf_path TEXT,
+            source_provider TEXT,
+            bibtex_raw TEXT,
+            csl_json TEXT,
+            created_at TEXT NOT NULL,
+            UNIQUE(project_id, citekey),
+            UNIQUE(project_id, doi)
+        );
+        """
+    )
+    await legacy.execute(
+        "INSERT INTO papers (id, project_id, citekey, title, authors_json, created_at) "
+        "VALUES ('p1','proj','doe2026legacy','Legacy Paper','[]','now')"
+    )
+    await legacy.commit()
+    await legacy.close()
+
+    conn = await get_connection(db_path)
+    try:
+        # Migration ran on open; the legacy row must not crash list_papers.
+        cursor = await conn.execute("PRAGMA table_info(papers)")
+        columns = {row[1] for row in await cursor.fetchall()}
+        assert "item_type" in columns
+        papers = await repository.list_papers(conn, "proj")
+        assert len(papers) == 1
+        assert papers[0].item_type == "other"
+    finally:
+        await conn.close()
 
 
 @pytest.mark.asyncio

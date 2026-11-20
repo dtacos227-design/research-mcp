@@ -128,8 +128,8 @@ def build_bibtex_entry(paper: PaperModel) -> str:
     """Build one `.bib` entry keyed by the paper's citekey.
 
     When the paper has a raw Crossref BibTeX blob, re-key that entry (keeping
-    its richer publisher-supplied fields) and only normalize doi/title if the
-    raw entry is missing them. Otherwise build from structured fields.
+    its richer publisher-supplied fields verbatim); only the entry ID is
+    rewritten to our citekey. Otherwise build from structured fields.
     """
     entry_type = item_type_to_bibtex(paper.item_type)
     entry_type_name = entry_type[1:]  # strip leading '@'

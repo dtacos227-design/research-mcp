@@ -20,9 +20,9 @@ from research_mcp.parsers.ingestion import (
     ingest_remote_paper,
     resolve_identifier,
 )
-from research_mcp.parsers.pdf_extractor import MAX_PDF_BYTES
+from research_mcp.parsers.pdf_extractor import MAX_PDF_BYTES, PdfMetadata
 from research_mcp.providers.aggregator import AggregatedSearch
-from research_mcp.providers.base import SearchResult, UnpaywallResult
+from research_mcp.providers.base import AuthorName, SearchResult, UnpaywallResult
 
 
 @pytest_asyncio.fixture
@@ -437,9 +437,33 @@ def test_hash_file_rejects_oversized_input_before_reading(tmp_path: Path):
     oversized = tmp_path / "oversized.pdf"
     with oversized.open("wb") as stream:
         stream.truncate(MAX_PDF_BYTES + 1)
-
     with pytest.raises(ValueError, match="size"):
         ingestion._hash_file(oversized)
+
+
+def test_local_pdf_metadata_inherits_crossref_type_and_structured_authors(tmp_path: Path):
+    crossref = SearchResult(
+        source_provider="crossref",
+        external_id="10.1/x",
+        doi="10.1/x",
+        title="Crossref Title",
+        authors=["Ludwig van der Berg"],
+        authors_structured=[AuthorName(given="Ludwig", family="van der Berg")],
+        item_type="journal-article",
+        year=2024,
+    )
+    source = tmp_path / "paper.pdf"
+
+    result = ingestion._metadata_from_local_pdf(
+        PdfMetadata(title=None, author=None, year=None),
+        source,
+        "10.1/x",
+        crossref,
+        "deadbeef",
+    )
+
+    assert result.item_type == "journal-article"
+    assert result.authors_structured == [AuthorName(given="Ludwig", family="van der Berg")]
 
 
 @pytest.mark.asyncio

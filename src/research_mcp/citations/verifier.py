@@ -12,7 +12,6 @@ import re
 # generate_citekey only ever emits `[a-z][a-z0-9]*`, but this stays honest to
 # Pandoc's grammar in case a draft is hand-edited.
 _KEY_CHAR = r"[A-Za-z0-9_:.#$%&\-+?<>~/]"
-_CITEKEY_RE = re.compile(rf"[A-Za-z]{_KEY_CHAR}*")
 
 # A bare `@key` (no brackets) is only a citation when `@` is NOT preceded by a
 # word character. This admits `@jones2023`, `[@key]`, and `[-@key]` (where `@`
