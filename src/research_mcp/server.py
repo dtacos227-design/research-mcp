@@ -1090,6 +1090,120 @@ def _wordcraft_recommendations(report: dict) -> list[str]:
     return items
 
 
+def _write_in_wordcraft_text(
+    project_id: str,
+    csl_style: str = "apa",
+    target_filename: str = "manuscript",
+) -> str:
+    return f"""You are orchestrating Research MCP + WordCraft MCP to write a final document.
+
+**Project:** {project_id!r}  |  **CSL style:** {csl_style!r}
+**Output:** {target_filename}.docx / {target_filename}.pdf
+
+---
+
+## Step 1 — Check the environment
+
+Call `check_wordcraft_env("{project_id}")`.
+
+- If `live_desktop.ready` is true, start the bridge with `--connect 127.0.0.1:7981`.
+  **IMPORTANT:** `--connect` must NOT be combined with `--automation-read-root` or
+  `--automation-write-root`; the running app does not support confinement.
+- Else if `wordcraft_cli.found` is true, start the headless server with the
+  `confinement.mcp_command` snippet from the report (both roots at the workspace root).
+- Else: skip to Fallback below.
+
+## Step 2 — Get the verified handoff
+
+Call `prepare_wordcraft_handoff("{project_id}", csl_style="{csl_style}", mode="live_authoring")`.
+
+Stop immediately if `cited_but_missing` is non-empty — do NOT write a document that
+silently drops citations.
+
+## Step 3 — Execute the blueprint
+
+The result carries `tool_sequence`, a list of WordCraft calls. Execute them in order:
+
+- `new_document` → `file.setAuthor` → `styles.modify` (Normal, Heading1–3) →
+  `references.citationStyle` → content blocks (type_text / insert_table / insert.picture) →
+  bibliography text → `caret.docEnd` → `file.strictReport` → `render_page` → `save_document`
+  `.docx` → `file.exportPdf` strict.
+
+**Safety rules:**
+- In revision mode, call `execute("review.trackChanges", {{"value": true}})` right
+  after `file.setAuthor`. Never call `review.trackChanges` without `value`; it toggles.
+- After every `references.bibliography`, `references.toc`, or `references.tableOfFigures`
+  call `caret.docEnd` to move the caret out of the generated heading.
+- On an `outcome unknown` delivery error: call `inspect_document` first, check whether
+  the step was actually applied, then decide whether to retry.
+
+## Step 4 — Verify
+
+`file.strictReport` must report `"strict": "passed"`.
+`render_page` the first and last page; fix any visual problem before saving.
+`save_document` to `{target_filename}.docx`, then `file.exportPdf` with `strict: true`.
+
+## Fallback (no WordCraft available)
+
+Call `export_to_docx("{project_id}", "{target_filename}", csl_style="{csl_style}")`.
+"""
+
+
+@mcp.prompt()
+def write_in_wordcraft(
+    project_id: str,
+    csl_style: str = "apa",
+    target_filename: str = "manuscript",
+) -> str:
+    """Guide an AI through the full Research MCP → WordCraft MCP writing workflow."""
+    return _write_in_wordcraft_text(project_id, csl_style, target_filename)
+
+
+def _peer_review_in_wordcraft_text(project_id: str, docx_path: str) -> str:
+    return f"""You are reviewing a research document in WordCraft MCP using the local library in
+Research MCP project {project_id!r}.
+
+**Document to review:** {docx_path}
+
+---
+
+## Step 1 — Open and configure
+
+1. `check_wordcraft_env("{project_id}")` — confirm WordCraft is reachable.
+2. `open_document("{docx_path}")` in WordCraft MCP.
+3. `execute("file.setAuthor", {{"name": "Research Agent"}})` — your identity in tracked changes.
+4. `execute("review.trackChanges", {{"value": true}})` — always pass `value: true`; without it
+   the command is a toggle and might disable tracking.
+
+## Step 2 — Audit claims and citations
+
+For every factual claim or inline citation you encounter:
+
+- Cross-check with `search_local_library("{project_id}", "<claim or topic>")`.
+- Read the supporting passage with `read_paper_section("{project_id}", "<citekey>", "<section>")`.
+- If a citekey in the document is not in the project library, flag it as a potential hallucination.
+
+## Step 3 — Insert tracked edits and comments
+
+- Use WordCraft tracked changes (already on) to correct text in-line.
+- Insert a comment for each substantive concern: cite the evidence from the local library.
+- Do not silently delete text; use strike-through or propose an alternative.
+
+## Step 4 — Verify and save
+
+1. `inspect_document` — check that tracked changes are recorded (look for revision marks).
+2. On `outcome unknown`: call `inspect_document` first; never repeat a mutation blindly.
+3. `save_document` to a `-reviewed` copy (e.g. append `-reviewed.docx`).
+4. Summarise findings: list each issue with its citekey evidence and the section it appears in.
+"""
+
+
+@mcp.prompt()
+def peer_review_in_wordcraft(project_id: str, docx_path: str) -> str:
+    """Guide an AI to audit a document in WordCraft with tracked changes and library evidence."""
+    return _peer_review_in_wordcraft_text(project_id, docx_path)
+
+
 def main() -> None:
     settings = get_settings()
     configure_logging(settings.log_level)
