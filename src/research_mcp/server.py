@@ -1223,6 +1223,133 @@ def peer_review_in_wordcraft(project_id: str, docx_path: str) -> str:
     return _peer_review_in_wordcraft_text(project_id, docx_path)
 
 
+# ---------------------------------------------------------------------------
+# MCP Resources
+# ---------------------------------------------------------------------------
+
+
+@mcp.resource("research://projects", name="projects", description="All research projects")
+async def resource_projects() -> str:
+    """Return JSON list of all research projects."""
+    settings = get_settings()
+    conn = await get_connection(settings.db_path)
+    try:
+        rows = await repository.list_projects(conn)
+    finally:
+        await conn.close()
+    return json.dumps(rows, indent=2, ensure_ascii=False)
+
+
+@mcp.resource(
+    "research://templates",
+    name="templates",
+    description="Available CSL, DOCX, and LaTeX templates",
+)
+async def resource_templates() -> str:
+    """Return JSON dict of available export templates, read from disk at call time."""
+    from research_mcp.exporters.templates import CSL_STYLES, DOCX_TEMPLATES, LATEX_TEMPLATES
+
+    return json.dumps(
+        {
+            "csl": sorted(f"{s}.csl" for s in CSL_STYLES),
+            "docx": sorted(f"{t}.docx" for t in DOCX_TEMPLATES),
+            "latex": sorted(f"{t}.tex" for t in LATEX_TEMPLATES),
+        },
+        indent=2,
+    )
+
+
+@mcp.resource(
+    "research://project/{project_id}/bibliography",
+    name="project-bibliography",
+    description="BibTeX bibliography for a research project",
+)
+async def resource_bibliography(project_id: str) -> str:
+    """Return contents of references.bib, or instructions if not yet generated."""
+    settings = get_settings()
+    conn = await get_connection(settings.db_path)
+    try:
+        try:
+            project = await repository.get_project(conn, project_id)
+        except repository.ProjectNotFoundError:
+            return (
+                f"Project {project_id!r} not found. Use list_projects() to see available projects."
+            )
+    finally:
+        await conn.close()
+    bib_path = settings.workspace_dir / project.slug / "references.bib"
+    if not bib_path.exists():
+        return (
+            "Bibliography not yet generated for this project. "
+            "Call generate_bibliography first to create references.bib."
+        )
+    return bib_path.read_text(encoding="utf-8")
+
+
+@mcp.resource(
+    "research://project/{project_id}/csl-json",
+    name="project-csl-json",
+    description="CSL-JSON bibliography for a research project",
+)
+async def resource_csl_json(project_id: str) -> str:
+    """Return contents of references.csl.json, or instructions if not yet generated."""
+    settings = get_settings()
+    conn = await get_connection(settings.db_path)
+    try:
+        try:
+            project = await repository.get_project(conn, project_id)
+        except repository.ProjectNotFoundError:
+            return (
+                f"Project {project_id!r} not found. Use list_projects() to see available projects."
+            )
+    finally:
+        await conn.close()
+    csl_path = settings.workspace_dir / project.slug / "references.csl.json"
+    if not csl_path.exists():
+        return (
+            "CSL-JSON bibliography not yet generated for this project. "
+            "Call generate_bibliography first to create references.csl.json."
+        )
+    return csl_path.read_text(encoding="utf-8")
+
+
+@mcp.resource(
+    "research://project/{project_id}/outline",
+    name="project-outline",
+    description="Draft chapter outline for a research project",
+)
+async def resource_outline(project_id: str) -> str:
+    """Return Markdown table of draft sections, or instructions if none exist."""
+    settings = get_settings()
+    conn = await get_connection(settings.db_path)
+    try:
+        try:
+            await repository.get_project(conn, project_id)
+        except repository.ProjectNotFoundError:
+            return (
+                f"Project {project_id!r} not found. Use list_projects() to see available projects."
+            )
+        sections = await repository.list_draft_sections(conn, project_id)
+    finally:
+        await conn.close()
+    if not sections:
+        return (
+            "No draft sections yet for this project. "
+            "Call save_draft_section to start writing chapters."
+        )
+    lines = [
+        "| order | filename | title | words | updated |",
+        "|-------|----------|-------|-------|---------|",
+    ]
+    for s in sections:
+        row = (
+            f"| {s['section_order']} | {s['filename']} | {s['title'] or ''}"
+            f" | {s['word_count']} | {s['updated_at'] or ''} |"
+        )
+        lines.append(row)
+    return "\n".join(lines)
+
+
 def main() -> None:
     settings = get_settings()
     configure_logging(settings.log_level)
