@@ -6,6 +6,7 @@ MCP tools stay thin. Every environment- or platform-dependent function takes
 explicit `env` / `platform` arguments so tests never depend on the host.
 """
 
+import json
 import os
 import re
 import shutil
@@ -484,3 +485,48 @@ def build_blueprint(
         "tool_sequence": steps,
         "warnings": warnings,
     }
+
+
+MAX_SCRIPT_BYTES = 4 * 1024 * 1024
+MAX_JOB_OUTPUTS = 64
+
+
+def build_job_script(
+    seed_docx: Path,
+    csl_style: str,
+    docx_out: Path,
+    pdf_out: Path,
+    author: str = WORDCRAFT_AUTHOR,
+    toc_title: str = "Contents",
+) -> dict:
+    """A job that opens the seed DOCX, styles it and saves both outputs."""
+    return {
+        "file": str(seed_docx),
+        "commands": [
+            {"command": "file.setAuthor", "params": {"name": author}},
+            {
+                "command": "references.citationStyle",
+                "params": {"style": citation_style_for(csl_style)},
+            },
+            {"command": "references.toc", "params": {"levels": 3, "title": toc_title}},
+            {"command": "caret.docEnd"},
+        ],
+        "save": [str(docx_out), str(pdf_out)],
+    }
+
+
+def serialize_job_script(script: dict) -> bytes:
+    """Encode a job script within WordCraft's 4 MiB and 64-output limits."""
+    outputs = script.get("save") or []
+    if len(outputs) > MAX_JOB_OUTPUTS:
+        raise ToolError(
+            f"A WordCraft job script may save at most {MAX_JOB_OUTPUTS} outputs; "
+            f"this one lists {len(outputs)}."
+        )
+    payload = json.dumps(script, indent=2, ensure_ascii=False).encode("utf-8")
+    if len(payload) > MAX_SCRIPT_BYTES:
+        raise ToolError(
+            f"The job script is {len(payload)} bytes, over WordCraft's 4 MiB cap. "
+            "Split the draft into smaller chapters or use mode='seed_docx'."
+        )
+    return payload
