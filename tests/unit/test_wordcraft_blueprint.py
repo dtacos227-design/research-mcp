@@ -93,3 +93,34 @@ def test_blueprint_heading_levels_and_lists(tmp_path):
     commands = [s["arguments"].get("command") for s in steps]
     assert "para.heading3" in commands
     assert "para.numbering" in commands
+
+
+def test_split_bibliography_removes_trailing_references(tmp_path):
+    markdown = "# Intro\n\nBody.\n\n# References\n\nDoe, J. (2024). Valid Paper.\n"
+    blocks, bibliography = wb.split_bibliography(wb.parse_markdown_blocks(markdown, tmp_path))
+    assert [block["kind"] for block in blocks] == ["heading", "paragraph"]
+    assert bibliography["title"] == "References"
+    assert bibliography["markdown"] == "Doe, J. (2024). Valid Paper."
+
+
+def test_split_bibliography_without_references(tmp_path):
+    blocks, bibliography = wb.split_bibliography(
+        wb.parse_markdown_blocks("# Intro\n\nBody.\n", tmp_path)
+    )
+    assert len(blocks) == 2
+    assert bibliography == {"title": "References", "markdown": ""}
+
+
+def test_polish_sequence_starts_by_opening_the_seed(tmp_path):
+    sequence = wb.build_polish_sequence(
+        tmp_path / "exports/seed.docx", "ieee", tmp_path / "exports", "final"
+    )
+    assert sequence[0] == {
+        "tool": "open_document",
+        "arguments": {"path": str(tmp_path / "exports/seed.docx")},
+    }
+    commands = [step["arguments"].get("command") for step in sequence]
+    assert "references.toc" in commands
+    assert "file.strictReport" in commands
+    assert commands[-1] == "file.exportPdf"
+    assert sequence[-2]["arguments"]["path"] == str(tmp_path / "exports" / "final.docx")

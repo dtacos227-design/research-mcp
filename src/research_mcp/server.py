@@ -469,6 +469,50 @@ def _draft_markdown_or_raise(markdown: str) -> str:
     return markdown
 
 
+async def _get_project_or_raise(conn, project_id: str):
+    try:
+        return await repository.get_project(conn, project_id)
+    except repository.ProjectNotFoundError as exc:
+        raise ToolError(str(exc)) from exc
+
+
+async def _render_docx_export(
+    conn,
+    project,
+    project_dir: Path,
+    output_name: str,
+    csl_style: str,
+    template_name: str,
+    polish: bool,
+    strict_citations: bool,
+) -> tuple[Path, list[str]]:
+    """Render the merged draft to `exports/<output_name>.docx` behind the citation gate."""
+    output = _export_target(project_dir, output_name, ".docx")
+    csl_name = resolve_csl(csl_style)
+    docx_name = resolve_docx_template(template_name)
+
+    sections = await repository.list_draft_sections(conn, project.id)
+    markdown = _draft_markdown_or_raise(merge_draft_markdown(project_dir, sections))
+    missing = await _citation_gate(conn, project.id, markdown, strict_citations)
+    bib_path, _csl_json = await _refresh_bibliography(conn, project.id, project_dir)
+
+    with (
+        bundled_template(f"csl/{csl_name}.csl") as csl_path,
+        bundled_template(f"docx/{docx_name}.docx") as reference_doc,
+    ):
+        render_docx(
+            markdown,
+            bib_path,
+            csl_path,
+            reference_doc,
+            output,
+            resource_path=project_dir,
+        )
+    if polish:
+        polish_docx(output, project.name)
+    return output, missing
+
+
 def _warnings_for_missing(missing: list[str]) -> list[str]:
     if not missing:
         return []
@@ -602,35 +646,18 @@ async def export_to_docx(
         settings = get_settings()
         conn = await get_connection(settings.db_path)
         try:
-            try:
-                project = await repository.get_project(conn, project_id)
-            except repository.ProjectNotFoundError as exc:
-                raise ToolError(str(exc)) from exc
+            project = await _get_project_or_raise(conn, project_id)
             project_dir = _project_dir(settings, project)
-            output = _export_target(project_dir, output_name, ".docx")
-            csl_name = resolve_csl(csl_style)
-            docx_name = resolve_docx_template(template_name)
-
-            sections = await repository.list_draft_sections(conn, project_id)
-            markdown = _draft_markdown_or_raise(merge_draft_markdown(project_dir, sections))
-            missing = await _citation_gate(conn, project_id, markdown, strict_citations)
-            bib_path, _csl_json = await _refresh_bibliography(conn, project_id, project_dir)
-
-            with (
-                bundled_template(f"csl/{csl_name}.csl") as csl_path,
-                bundled_template(f"docx/{docx_name}.docx") as reference_doc,
-            ):
-                render_docx(
-                    markdown,
-                    bib_path,
-                    csl_path,
-                    reference_doc,
-                    output,
-                    resource_path=project_dir,
-                )
-            if polish:
-                polish_docx(output, project.name)
-
+            output, missing = await _render_docx_export(
+                conn,
+                project,
+                project_dir,
+                output_name,
+                csl_style,
+                template_name,
+                polish,
+                strict_citations,
+            )
             return {
                 "output_path": str(output),
                 "format": "docx",
@@ -831,6 +858,194 @@ async def check_wordcraft_env(project_id: str | None = None) -> dict:
     except Exception as exc:
         raise ToolError(
             f"Could not inspect the WordCraft environment: {type(exc).__name__}: {exc}"
+        ) from exc
+
+
+_HANDOFF_MODES = ("live_authoring", "seed_docx", "batch_script")
+_HANDOFF_IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".svg", ".webp"})
+
+
+def _handoff_stem(output_name: str) -> str:
+    name = output_name.strip().removesuffix(".docx").removesuffix(".pdf").removesuffix(".md")
+    if not name or name in {".", ".."} or "/" in name or "\\" in name or ".." in name:
+        raise ToolError(
+            f"output_name {output_name!r} must be a plain file name without directories."
+        )
+    return name
+
+
+def _project_assets(project_dir: Path) -> list[Path]:
+    assets = project_dir / "assets"
+    if not assets.is_dir():
+        return []
+    return sorted(
+        path
+        for path in assets.iterdir()
+        if path.is_file() and path.suffix.lower() in _HANDOFF_IMAGE_SUFFIXES
+    )
+
+
+def _handoff_warnings(missing: list[str], bibliography: dict | None) -> list[str]:
+    warnings = [
+        "Paths below are absolute and must stay inside the WordCraft automation "
+        "roots; point both roots at this project's workspace root.",
+        "After an `outcome unknown` delivery failure, call `inspect_document` "
+        "before repeating any step.",
+    ]
+    if bibliography and bibliography["markdown"].strip():
+        warnings.append(
+            "Citations and the reference list are Pandoc Citeproc output written as "
+            "plain text; WordCraft's `references.bibliography` only lists its own "
+            "citation fields, so do not add it on top of these steps."
+        )
+    warnings.extend(_warnings_for_missing(missing))
+    return warnings
+
+
+@mcp.tool()
+async def prepare_wordcraft_handoff(
+    project_id: str,
+    csl_style: str = "apa",
+    mode: Literal["live_authoring", "seed_docx", "batch_script"] = "live_authoring",
+    strict_citations: bool = True,
+    output_name: str = "manuscript",
+) -> dict:
+    """Hand a citation-verified draft to WordCraft as a blueprint, a seed DOCX or a job script.
+
+    `live_authoring` renders the merged draft through Pandoc Citeproc and returns the
+    parsed blocks plus the exact WordCraft tool sequence that writes them. `seed_docx`
+    exports a `.docx` to open with `open_document`. `batch_script` writes
+    `scripts/job.json` for `wordcraft-cli run --script`.
+    """
+    try:
+        if mode not in _HANDOFF_MODES:
+            raise ToolError(
+                f"Unknown handoff mode {mode!r}; available modes are {list(_HANDOFF_MODES)!r}."
+            )
+        stem = _handoff_stem(output_name)
+        settings = get_settings()
+        conn = await get_connection(settings.db_path)
+        try:
+            project = await _get_project_or_raise(conn, project_id)
+            project_dir = _project_dir(settings, project)
+            exports_dir = project_dir / "exports"
+            sections = await repository.list_draft_sections(conn, project.id)
+            markdown = _draft_markdown_or_raise(merge_draft_markdown(project_dir, sections))
+            missing = await _citation_gate(conn, project.id, markdown, strict_citations)
+
+            result: dict = {
+                "project_id": project.id,
+                "mode": mode,
+                "csl_style": csl_style,
+                "cited_but_missing": missing,
+                "handoff_markdown_path": None,
+                "seed_docx_path": None,
+                "script_path": None,
+                "blueprint": None,
+                "assets": [],
+                "tool_sequence": [],
+                "run_command": [],
+                "warnings": [],
+            }
+
+            if mode == "live_authoring":
+                output = _export_target(project_dir, f"{stem}-handoff", ".md")
+                csl_name = resolve_csl(csl_style)
+                bib_path, _csl_json = await _refresh_bibliography(conn, project.id, project_dir)
+                with bundled_template(f"csl/{csl_name}.csl") as csl_path:
+                    render_markdown(
+                        markdown,
+                        bib_path,
+                        csl_path,
+                        output,
+                        resource_path=project_dir,
+                    )
+                rendered = output.read_text(encoding="utf-8")
+                assets = _project_assets(project_dir)
+                blueprint = wordcraft_bridge.build_blueprint(
+                    project.name,
+                    output,
+                    rendered,
+                    assets,
+                    csl_style,
+                    exports_dir,
+                    stem,
+                    project_dir=project_dir,
+                )
+                result.update(
+                    {
+                        "handoff_markdown_path": str(output),
+                        "blueprint": blueprint,
+                        "assets": blueprint["assets"],
+                        "tool_sequence": blueprint["tool_sequence"],
+                        "warnings": [
+                            *blueprint["warnings"],
+                            *_handoff_warnings(missing, blueprint["bibliography"]),
+                        ],
+                    }
+                )
+                return result
+
+            seed_docx, missing = await _render_docx_export(
+                conn,
+                project,
+                project_dir,
+                stem,
+                csl_style,
+                "default_academic",
+                True,
+                strict_citations,
+            )
+            result["seed_docx_path"] = str(seed_docx)
+            result["cited_but_missing"] = missing
+
+            if mode == "seed_docx":
+                result.update(
+                    {
+                        "tool_sequence": wordcraft_bridge.build_polish_sequence(
+                            seed_docx, csl_style, exports_dir, stem
+                        ),
+                        "warnings": _handoff_warnings(missing, None),
+                    }
+                )
+                return result
+
+            script = wordcraft_bridge.build_job_script(
+                seed_docx,
+                csl_style,
+                exports_dir / f"{stem}.docx",
+                exports_dir / f"{stem}.pdf",
+            )
+            payload = wordcraft_bridge.serialize_job_script(script)
+            script_path = _safe_destination(project_dir / "scripts" / "job.json", project_dir)
+            script_path.parent.mkdir(parents=True, exist_ok=True)
+            script_path.write_bytes(payload)
+            cli = wordcraft_bridge.detect_wordcraft_cli()
+            result.update(
+                {
+                    "script_path": str(script_path),
+                    "run_command": [
+                        str(cli) if cli is not None else "wordcraft-cli",
+                        "run",
+                        "--script",
+                        str(script_path),
+                    ],
+                    "warnings": [
+                        *_handoff_warnings(missing, None),
+                        "Run the command above with `wordcraft-cli` and no automation "
+                        "roots: the job script already names absolute paths.",
+                    ],
+                }
+            )
+            return result
+        finally:
+            await conn.close()
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(
+            f"Could not prepare a WordCraft handoff for project {project_id!r}: "
+            f"{type(exc).__name__}: {exc}"
         ) from exc
 
 

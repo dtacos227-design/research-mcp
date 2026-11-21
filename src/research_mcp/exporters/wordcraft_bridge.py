@@ -433,6 +433,53 @@ def _block_steps(block: dict) -> list[dict]:
     return [{"tool": "type_text", "arguments": {"text": block["text"], "paragraphs": True}}]
 
 
+BIBLIOGRAPHY_HEADINGS = ("references", "bibliography", "daftar pustaka", "referensi")
+
+
+def _blocks_to_text(blocks: list[dict]) -> str:
+    """Flatten reference blocks into the plain text WordCraft will hold."""
+    parts: list[str] = []
+    for block in blocks:
+        if block["kind"] == "paragraph":
+            parts.append(block["text"])
+        elif block["kind"] == "list":
+            parts.append("\n".join(block["items"]))
+        elif block["kind"] == "table":
+            rows = [block["header"], *block["rows"]]
+            parts.append("\n".join(" | ".join(row) for row in rows))
+        elif block["kind"] == "figure":
+            parts.append(f"[{block['alt']}]")
+        elif block["kind"] == "code":
+            parts.append(block["text"])
+    return "\n\n".join(part for part in parts if part.strip())
+
+
+def split_bibliography(blocks: list[dict]) -> tuple[list[dict], dict]:
+    """Split parsed blocks into the body and the trailing reference list."""
+    index = None
+    for position, block in enumerate(blocks):
+        if block["kind"] == "heading" and block["text"].strip().lower() in BIBLIOGRAPHY_HEADINGS:
+            index = position
+    if index is None:
+        return blocks, {"title": "References", "markdown": ""}
+    return blocks[:index], {
+        "title": blocks[index]["text"].strip(),
+        "markdown": _blocks_to_text(blocks[index + 1 :]),
+    }
+
+
+def _bibliography_steps(bibliography: dict) -> list[dict]:
+    entries = bibliography["markdown"].strip()
+    if not entries:
+        return []
+    return [
+        {"tool": "type_text", "arguments": {"text": bibliography["title"]}},
+        _execute("para.heading1"),
+        {"tool": "type_text", "arguments": {"text": entries, "paragraphs": True}},
+        _execute("caret.docEnd"),
+    ]
+
+
 def build_blueprint(
     project_name: str,
     markdown_path: Path,
@@ -446,7 +493,8 @@ def build_blueprint(
 ) -> dict:
     """Turn Citeproc-rendered Markdown into blocks plus the WordCraft calls that write them."""
     root = project_dir or (exports_dir.parent if exports_dir.name == "exports" else exports_dir)
-    blocks = parse_markdown_blocks(markdown, root)
+    parsed = parse_markdown_blocks(markdown, root)
+    blocks, bibliography = split_bibliography(parsed)
     warnings = [
         f"Figure path does not exist: {block['path']}"
         for block in blocks
@@ -461,6 +509,7 @@ def build_blueprint(
     ]
     for block in blocks:
         steps.extend(_block_steps(block))
+    steps.extend(_bibliography_steps(bibliography))
     steps.extend(
         [
             _execute("file.strictReport"),
@@ -480,7 +529,7 @@ def build_blueprint(
         "document_title": project_name,
         "markdown_path": str(markdown_path),
         "blocks": blocks,
-        "bibliography": {"title": "References", "markdown": ""},
+        "bibliography": bibliography,
         "assets": [str(asset) for asset in assets],
         "tool_sequence": steps,
         "warnings": warnings,
@@ -530,3 +579,31 @@ def serialize_job_script(script: dict) -> bytes:
             "Split the draft into smaller chapters or use mode='seed_docx'."
         )
     return payload
+
+
+def build_polish_sequence(
+    seed_docx: Path,
+    csl_style: str,
+    exports_dir: Path,
+    output_stem: str,
+) -> list[dict]:
+    """The WordCraft calls that polish a seed DOCX: styles, TOC, strict check, save."""
+    return [
+        {"tool": "open_document", "arguments": {"path": str(seed_docx)}},
+        {"tool": "inspect_document", "arguments": {}},
+        _execute("file.setAuthor", {"name": WORDCRAFT_AUTHOR}),
+        *_style_steps(),
+        _execute("references.citationStyle", {"style": citation_style_for(csl_style)}),
+        _execute("references.toc", {"levels": 3, "title": "Contents"}),
+        _execute("caret.docEnd"),
+        _execute("file.strictReport"),
+        {"tool": "render_page", "arguments": {"page": 1}},
+        {
+            "tool": "save_document",
+            "arguments": {"path": str(exports_dir / f"{output_stem}.docx")},
+        },
+        _execute(
+            "file.exportPdf",
+            {"path": str(exports_dir / f"{output_stem}.pdf"), "strict": True},
+        ),
+    ]
