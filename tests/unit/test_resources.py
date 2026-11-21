@@ -142,3 +142,29 @@ async def test_project_not_found_in_bibliography_resource(tmp_path, monkeypatch)
     monkeypatch.setenv("RESEARCH_MCP_DB_PATH", str(tmp_path / "db.sqlite"))
     result = await server.resource_bibliography(project_id="nonexistent-id")
     assert "not found" in result.lower() or "Project" in result
+
+
+@pytest.mark.asyncio
+async def test_templates_resource_reads_from_disk(tmp_path):
+    """resource_templates must reflect the actual files on disk, not hardcoded lists."""
+    import json as _json
+    from pathlib import Path
+
+    from research_mcp import server as srv
+
+    # Grab the real templates dir via the existing bundled_template mechanism
+    templates_dir = Path(srv.__file__).parent / "templates"
+    csl_on_disk = sorted(p.name for p in (templates_dir / "csl").glob("*.csl"))
+    docx_on_disk = sorted(p.name for p in (templates_dir / "docx").glob("*.docx"))
+    latex_on_disk = sorted(p.name for p in (templates_dir / "latex").glob("*.tex"))
+
+    result = await srv.resource_templates()
+    data = _json.loads(result)
+
+    assert data["csl"] == csl_on_disk, f"CSL list {data['csl']} does not match disk {csl_on_disk}"
+    assert data["docx"] == docx_on_disk, (
+        f"DOCX list {data['docx']} does not match disk {docx_on_disk}"
+    )
+    assert data["latex"] == latex_on_disk, (
+        f"LaTeX list {data['latex']} does not match disk {latex_on_disk}"
+    )

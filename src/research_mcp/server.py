@@ -1383,14 +1383,13 @@ async def resource_projects() -> str:
     description="Available CSL, DOCX, and LaTeX templates",
 )
 async def resource_templates() -> str:
-    """Return JSON dict of available export templates, read from disk at call time."""
-    from research_mcp.exporters.templates import CSL_STYLES, DOCX_TEMPLATES, LATEX_TEMPLATES
-
+    """Return JSON dict of available export templates, scanned from the templates directory."""
+    templates_dir = Path(__file__).parent / "templates"
     return json.dumps(
         {
-            "csl": sorted(f"{s}.csl" for s in CSL_STYLES),
-            "docx": sorted(f"{t}.docx" for t in DOCX_TEMPLATES),
-            "latex": sorted(f"{t}.tex" for t in LATEX_TEMPLATES),
+            "csl": sorted(p.name for p in (templates_dir / "csl").glob("*.csl")),
+            "docx": sorted(p.name for p in (templates_dir / "docx").glob("*.docx")),
+            "latex": sorted(p.name for p in (templates_dir / "latex").glob("*.tex")),
         },
         indent=2,
     )
