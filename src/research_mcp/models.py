@@ -60,8 +60,13 @@ class HandoffPayload(BaseModel):
     mode: HandoffMode
     csl_style: str = "apa"
     blueprint: dict | None = None
+    handoff_markdown_path: str | None = None
     seed_docx_path: str | None = None
     script_path: str | None = None
+    assets: list[str] = Field(default_factory=list)
+    tool_sequence: list[dict] = Field(default_factory=list)
+    run_command: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
 
 
 ExportFormat = Literal["docx", "latex", "pdf", "markdown"]

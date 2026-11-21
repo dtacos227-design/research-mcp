@@ -12,9 +12,10 @@ from research_mcp.citations.verifier import diff_citations, extract_citekeys
 from research_mcp.config import configure_logging, get_settings
 from research_mcp.db import repository
 from research_mcp.db.database import get_connection
-from research_mcp.exporters import latex_engine
+from research_mcp.exporters import latex_engine, wordcraft_bridge
 from research_mcp.exporters.docx_polisher import polish_docx
 from research_mcp.exporters.pandoc_engine import (
+    detect_pandoc,
     merge_draft_markdown,
     render_docx,
     render_markdown,
@@ -763,6 +764,115 @@ async def export_to_markdown_bundle(
         raise ToolError(
             f"Could not export project {project_id!r} to Markdown: {type(exc).__name__}: {exc}"
         ) from exc
+
+
+@mcp.tool()
+async def check_wordcraft_env(project_id: str | None = None) -> dict:
+    """Report the local WordCraft install, live desktop and confinement roots."""
+    try:
+        settings = get_settings()
+        workspace_root = settings.workspace_dir
+        workspace_root.mkdir(parents=True, exist_ok=True)
+        cli = wordcraft_bridge.detect_wordcraft_cli()
+        desktop = wordcraft_bridge.detect_wordcraft_desktop()
+        key_path = wordcraft_bridge.control_key_path()
+        port_open = wordcraft_bridge.probe_port()
+        key_present = bool(key_path and key_path.is_file() and key_path.stat().st_size > 0)
+        report = {
+            "wordcraft_cli": {
+                "found": cli is not None,
+                "path": str(cli) if cli is not None else None,
+                "version": wordcraft_bridge.cli_version(cli) if cli is not None else None,
+            },
+            "desktop_app": {
+                "found": desktop is not None,
+                "path": str(desktop) if desktop is not None else None,
+            },
+            "live_desktop": {
+                "port": wordcraft_bridge.DEFAULT_PORT,
+                "port_open": port_open,
+                "control_key_path": str(key_path) if key_path is not None else None,
+                "control_key_present": key_present,
+                "ready": port_open and key_present,
+            },
+            "workspace_root": str(workspace_root),
+            "confinement": {
+                "read_root": str(workspace_root),
+                "write_root": str(workspace_root),
+                "mcp_command": wordcraft_bridge.build_mcp_command(cli, workspace_root),
+            },
+            "fallback": {
+                "pandoc": _binary_path(detect_pandoc),
+                "tectonic": _binary_path(latex_engine.detect_tectonic),
+            },
+        }
+        report["recommendations"] = _wordcraft_recommendations(report)
+        if project_id is not None:
+            conn = await get_connection(settings.db_path)
+            try:
+                try:
+                    project = await repository.get_project(conn, project_id)
+                except repository.ProjectNotFoundError as exc:
+                    raise ToolError(str(exc)) from exc
+                chapters = await repository.list_draft_sections(conn, project_id)
+                papers = await repository.list_papers(conn, project_id)
+            finally:
+                await conn.close()
+            report["project"] = {
+                "id": project.id,
+                "slug": project.slug,
+                "workspace_dir": str(workspace_root / project.slug),
+                "draft_chapters": [chapter["filename"] for chapter in chapters],
+                "papers": len(papers),
+            }
+        return report
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(
+            f"Could not inspect the WordCraft environment: {type(exc).__name__}: {exc}"
+        ) from exc
+
+
+def _binary_path(detect) -> str | None:
+    try:
+        return detect()
+    except ToolError:
+        return None
+
+
+def _wordcraft_recommendations(report: dict) -> list[str]:
+    items: list[str] = []
+    live = report["live_desktop"]
+    cli = report["wordcraft_cli"]
+    roots = report["confinement"]
+    if live["ready"]:
+        items.append(
+            f"WordCraft is running on 127.0.0.1:{live['port']}. Start the bridge with "
+            f"`--connect 127.0.0.1:{live['port']}`; `--connect` cannot be combined with the "
+            "automation roots, so the app itself is not confined."
+        )
+    if cli["found"]:
+        items.append(
+            "Use the headless WordCraft MCP server with both roots: "
+            + " ".join(roots["mcp_command"])
+        )
+    if not cli["found"]:
+        if report["desktop_app"]["found"]:
+            items.append(
+                "The WordCraft desktop app is installed but `wordcraft-cli` is missing; the "
+                "CLI ships as a separate download from the WordCraft releases."
+            )
+        items.append(
+            "Without WordCraft, fall back to export_to_docx or "
+            "prepare_wordcraft_handoff(mode='seed_docx')."
+        )
+    if report["fallback"]["pandoc"] is None:
+        items.append(
+            "Pandoc is missing, so the seed DOCX and the writing blueprint cannot be built: "
+            "install it with `brew install pandoc`."
+        )
+    return items
 
 
 def main() -> None:

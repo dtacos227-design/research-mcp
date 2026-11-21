@@ -65,6 +65,17 @@ def test_handoff_payload_accepts_valid_mode():
     assert payload.csl_style == "apa"
 
 
+def test_handoff_payload_handoff_details_default_empty():
+    payload = HandoffPayload(project_id="p1", mode="live_authoring")
+    assert payload.handoff_markdown_path is None
+    assert payload.seed_docx_path is None
+    assert payload.script_path is None
+    assert payload.assets == []
+    assert payload.tool_sequence == []
+    assert payload.run_command == []
+    assert payload.warnings == []
+
+
 def test_export_result_rejects_invalid_format():
     with pytest.raises(ValidationError):
         ExportResult(success=True, format="docx-typo")
