@@ -1,0 +1,61 @@
+import pytest
+
+from research_mcp import server
+
+
+@pytest.mark.asyncio
+async def test_prompts_registered():
+    names = [p.name for p in await server.mcp.list_prompts()]
+    assert "systematic_literature_review" in names
+    assert "draft_latex_paper" in names
+
+
+def test_slr_prompt_contains_workflow_steps():
+    text = server.systematic_literature_review("machine learning", 2020)
+    for needle in [
+        "search_papers",
+        "save_paper_to_project",
+        "read_paper_section",
+        "verify_citations",
+        "save_draft_section",
+        "2020",
+        "machine learning",
+    ]:
+        assert needle in text, f"Missing needle: {needle!r}"
+
+
+def test_slr_prompt_no_format_injection():
+    # curly braces in topic must not raise
+    text = server.systematic_literature_review("{evil}", 2020)
+    assert "evil" in text
+
+
+def test_slr_prompt_carries_project_id():
+    text = server.systematic_literature_review("neural networks", 2019)
+    assert "neural networks" in text
+    assert "2019" in text
+
+
+def test_latex_prompt_contains_workflow_steps():
+    text = server.draft_latex_paper("proj-1", "ieee")
+    for needle in [
+        "verify_citations",
+        "export_to_latex",
+        "proj-1",
+        "ieee",
+        "Tectonic",
+    ]:
+        assert needle in text, f"Missing needle: {needle!r}"
+
+
+def test_latex_prompt_no_format_injection():
+    # project_id with braces must not raise
+    text = server.draft_latex_paper("{bad}", "ieee")
+    assert "bad" in text
+
+
+def test_latex_prompt_covers_imrad():
+    text = server.draft_latex_paper("proj-2", "ieee")
+    # Should mention IMRaD sections
+    for section in ["Introduction", "Methods", "Results", "Discussion"]:
+        assert section in text, f"Missing IMRaD section: {section!r}"

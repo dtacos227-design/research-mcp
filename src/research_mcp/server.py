@@ -1168,6 +1168,143 @@ Call `export_to_docx("{project_id}", "{target_filename}", csl_style="{csl_style}
 """
 
 
+def _systematic_literature_review_text(topic: str, year_from: int) -> str:
+    return f"""You are conducting a systematic literature review on: {topic!r}.
+Include papers from {year_from} onwards.
+
+## Step 1 — Discover literature
+
+1. `search_papers` with your topic across multiple sources:
+   ```
+   search_papers(
+       query={topic!r}, year_from={year_from}, limit=15,
+       sources=["openalex", "semantic_scholar", "arxiv"],
+   )
+   ```
+2. Use `get_citation_graph` to find related work (backward and forward).
+3. Use `resolve_doi` for any DOI to confirm metadata and check for open-access PDF.
+
+## Step 2 — Save and parse selected papers
+
+For each paper you decide to include:
+1. `save_paper_to_project(project_id, identifier, download_pdf=True)` — saves
+   metadata, generates citekey, downloads and parses PDF sections.
+2. `list_paper_sections(project_id, citekey)` — see which sections are available.
+3. `read_paper_section(project_id, citekey, section_name)` — read Methods, Results,
+   Discussion without loading the full PDF into context.
+4. `search_local_library(project_id, query)` — cross-search your library for
+   specific findings across multiple papers.
+
+## Step 3 — Build the citation database
+
+1. `generate_bibliography(project_id)` — exports `references.bib` and
+   `references.csl.json`.
+2. `verify_citations(project_id)` — run before writing any draft to confirm all
+   `[@citekey]` references are in the local database.
+
+## Step 4 — Write the draft
+
+Write each chapter as a separate Markdown file using `[@citekey]` citations:
+1. `save_draft_section(project_id, "00_abstract.md", content, order=0)`
+2. `save_draft_section(project_id, "01_introduction.md", content, order=1)`
+3. `save_draft_section(project_id, "02_methodology.md", content, order=2)` —
+   search strategy, inclusion/exclusion criteria.
+4. `save_draft_section(project_id, "03_findings.md", content, order=3)` —
+   synthesise across papers.
+5. `save_draft_section(project_id, "04_discussion.md", content, order=4)`
+6. `save_draft_section(project_id, "05_conclusion.md", content, order=5)`
+
+## Step 5 — Verify and export
+
+1. `verify_citations(project_id)` — anti-hallucination gate.
+2. Choose your export:
+   - `export_to_docx(project_id, "literature_review")` — Word document
+   - `export_to_latex(project_id, "literature_review",
+       template_name="article_id", compile_pdf=True)` — PDF via Tectonic
+   - `prepare_wordcraft_handoff(project_id)` — if WordCraft MCP is active
+
+## Zero-Hallucination Rule
+
+Every `[@citekey]` in a draft MUST correspond to a paper saved with
+`save_paper_to_project`. Never invent citekeys.
+"""
+
+
+@mcp.prompt()
+def systematic_literature_review(topic: str, year_from: int = 2000) -> str:
+    """Guide an AI through a systematic literature review from search to draft."""
+    return _systematic_literature_review_text(topic, year_from)
+
+
+def _draft_latex_paper_text(project_id: str, template_name: str) -> str:
+    return f"""You are drafting a LaTeX research paper for project {project_id!r}
+using the {template_name!r} template.
+
+## Step 1 — Survey the project
+
+1. `get_project_status({project_id!r})` — see existing drafts, papers, assets.
+2. `generate_bibliography({project_id!r})` — ensure `references.bib` and
+   `references.csl.json` are up to date.
+
+## Step 2 — Write IMRaD sections
+
+If not already present, create each section with `save_draft_section`:
+
+- `save_draft_section({project_id!r}, "00_abstract.md", content, order=0)`
+  — 150–250 words.
+- `save_draft_section({project_id!r}, "01_introduction.md", content, order=1)`
+  — Introduction: motivate the problem, state contributions, cite `[@citekey]`.
+- `save_draft_section({project_id!r}, "02_methods.md", content, order=2)`
+  — Methods: dataset, model, algorithm.
+- `save_draft_section({project_id!r}, "03_results.md", content, order=3)`
+  — Results: quantitative findings; use `generate_chart` for figures.
+- `save_draft_section({project_id!r}, "04_discussion.md", content, order=4)`
+  — Discussion: interpret results, limitations.
+- `save_draft_section({project_id!r}, "05_conclusion.md", content, order=5)`
+  — Conclusion.
+
+## Step 3 — Verify citations
+
+1. `verify_citations({project_id!r})` — REQUIRED gate before export.
+   Fix any unknown `[@citekey]` before continuing.
+
+## Step 4 — Compile the LaTeX paper
+
+```
+export_to_latex(
+    project_id={project_id!r},
+    output_name="paper",
+    template_name={template_name!r},
+    compile_pdf=True,
+    strict_citations=True,
+)
+```
+
+If Tectonic is not installed, `compile_pdf=True` will raise an error.
+Use `compile_pdf=False` to get the `.tex` file only, then run:
+```bash
+tectonic paper.tex
+```
+Tectonic auto-downloads required TeX packages — no TeX Live installation needed.
+
+## Step 5 — Review the output
+
+1. The compiled `.pdf` and `.tex` are in `exports/` inside the project workspace.
+2. For final polish with WordCraft MCP:
+   `prepare_wordcraft_handoff({project_id!r}, mode="seed_docx")`
+
+## Zero-Hallucination Rule
+
+All citations must pass `verify_citations`. Never fabricate a citekey.
+"""
+
+
+@mcp.prompt()
+def draft_latex_paper(project_id: str, template_name: str = "ieee") -> str:
+    """Guide an AI through drafting and compiling a LaTeX paper."""
+    return _draft_latex_paper_text(project_id, template_name)
+
+
 @mcp.prompt()
 def write_in_wordcraft(
     project_id: str,
