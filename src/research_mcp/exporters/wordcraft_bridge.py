@@ -123,7 +123,13 @@ def _cli_candidates(platform: str, home: Path | None, env: Mapping[str, str]) ->
 def detect_wordcraft_cli(
     env: Mapping[str, str] | None = None, platform: str | None = None
 ) -> Path | None:
-    """Return the `wordcraft-cli` binary, or None when WordCraft's CLI is not installed."""
+    """Return the `wordcraft-cli` binary, or None when WordCraft's CLI is not installed.
+
+    When `env` is None the function reads `os.environ`, including the real PATH.
+    A partial env dict (e.g. one that omits PATH) skips the PATH search and falls
+    straight through to the per-OS candidate list — this is intentional for tests
+    that want to exercise specific candidates without polluting the host PATH.
+    """
     values = _environment(env)
     system = _system(platform)
 

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 from pathlib import Path
@@ -795,7 +796,12 @@ async def export_to_markdown_bundle(
 
 @mcp.tool()
 async def check_wordcraft_env(project_id: str | None = None) -> dict:
-    """Report the local WordCraft install, live desktop and confinement roots."""
+    """Report the local WordCraft install, live desktop and confinement roots.
+
+    Side effect: creates the workspace root directory when it does not yet
+    exist, so that the returned `confinement.mcp_command` paths are always
+    valid existing folders ready for `--automation-read-root`.
+    """
     try:
         settings = get_settings()
         workspace_root = settings.workspace_dir
@@ -809,7 +815,11 @@ async def check_wordcraft_env(project_id: str | None = None) -> dict:
             "wordcraft_cli": {
                 "found": cli is not None,
                 "path": str(cli) if cli is not None else None,
-                "version": wordcraft_bridge.cli_version(cli) if cli is not None else None,
+                "version": (
+                    await asyncio.to_thread(wordcraft_bridge.cli_version, cli)
+                    if cli is not None
+                    else None
+                ),
             },
             "desktop_app": {
                 "found": desktop is not None,
@@ -865,8 +875,15 @@ _HANDOFF_MODES = ("live_authoring", "seed_docx", "batch_script")
 _HANDOFF_IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".svg", ".webp"})
 
 
+_STEM_EXTENSIONS = (".docx", ".pdf", ".tex", ".md")
+
+
 def _handoff_stem(output_name: str) -> str:
-    name = output_name.strip().removesuffix(".docx").removesuffix(".pdf").removesuffix(".md")
+    name = output_name.strip()
+    for ext in _STEM_EXTENSIONS:
+        if name.lower().endswith(ext):
+            name = name[: -len(ext)]
+            break
     if not name or name in {".", ".."} or "/" in name or "\\" in name or ".." in name:
         raise ToolError(
             f"output_name {output_name!r} must be a plain file name without directories."
@@ -881,7 +898,9 @@ def _project_assets(project_dir: Path) -> list[Path]:
     return sorted(
         path
         for path in assets.iterdir()
-        if path.is_file() and path.suffix.lower() in _HANDOFF_IMAGE_SUFFIXES
+        if path.is_file()
+        and path.suffix.lower() in _HANDOFF_IMAGE_SUFFIXES
+        and path.resolve().is_relative_to(assets.resolve())
     )
 
 

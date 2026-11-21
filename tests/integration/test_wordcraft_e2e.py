@@ -32,13 +32,11 @@ SKIP_NO_PANDOC = pytest.mark.skipif(
 
 
 @pytest_asyncio.fixture
-async def e2e_project(tmp_path):
+async def e2e_project(tmp_path, monkeypatch):
     workspace_root = tmp_path / "workspaces"
     db_path = tmp_path / "research_mcp.db"
-    import os
-
-    os.environ["RESEARCH_MCP_WORKSPACE"] = str(workspace_root)
-    os.environ["RESEARCH_MCP_DB_PATH"] = str(db_path)
+    monkeypatch.setenv("RESEARCH_MCP_WORKSPACE", str(workspace_root))
+    monkeypatch.setenv("RESEARCH_MCP_DB_PATH", str(db_path))
 
     settings = get_settings()
     conn = await get_connection(settings.db_path)
@@ -65,8 +63,6 @@ async def e2e_project(tmp_path):
         "# Introduction\n\nNeural networks have advanced significantly [@smith2023neural].\n",
     )
     yield project, settings.workspace_dir / project.slug
-    os.environ.pop("RESEARCH_MCP_WORKSPACE", None)
-    os.environ.pop("RESEARCH_MCP_DB_PATH", None)
 
 
 @SKIP_NO_PANDOC

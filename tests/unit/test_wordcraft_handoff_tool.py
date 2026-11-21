@@ -292,3 +292,30 @@ async def test_empty_draft_rejected(tmp_path, monkeypatch):
     await conn.close()
     with pytest.raises(ToolError, match="no draft chapters"):
         await prepare_wordcraft_handoff(project.id)
+
+
+@pytest.mark.parametrize(
+    "bad_name",
+    ["../evil", "sub/name", ".", "..", "", "   "],
+)
+def test_handoff_stem_rejects_traversal(bad_name):
+    from research_mcp.server import _handoff_stem
+
+    with pytest.raises(ToolError, match="plain file name"):
+        _handoff_stem(bad_name)
+
+
+@pytest.mark.parametrize(
+    ("input_name", "expected"),
+    [
+        ("manuscript", "manuscript"),
+        ("manuscript.docx", "manuscript"),
+        ("manuscript.pdf", "manuscript"),
+        ("thesis.tex", "thesis"),
+        ("report.md", "report"),
+    ],
+)
+def test_handoff_stem_strips_extension(input_name, expected):
+    from research_mcp.server import _handoff_stem
+
+    assert _handoff_stem(input_name) == expected
