@@ -1,0 +1,37 @@
+---
+import Nav from '../components/Nav.astro'
+import { ViewTransitions } from 'astro:transitions'
+import '../styles/global.css'
+
+interface Props {
+  title: string
+  description?: string
+}
+
+const { title, description = 'Research MCP — riset ilmiah gratis, local-first, anti-halusinasi.' } = Astro.props
+---
+
+<html lang="id" class="scroll-smooth">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title} — Research MCP</title>
+    <meta name="description" content={description} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <ViewTransitions />
+  </head>
+  <body>
+    <Nav />
+    <main>
+      <slot />
+    </main>
+    <footer style="border-top: 1px solid #E8D9BC;"
+      class="py-10 text-center text-ink-700 font-body text-sm mt-16">
+      <p class="mb-1">© 2026 Research MCP · 100% gratis · local-first · open source</p>
+      <a href="https://github.com/your-org/research-mcp"
+        class="text-amber-500 hover:underline transition-colors">
+        GitHub
+      </a>
+    </footer>
+  </body>
+</html>
