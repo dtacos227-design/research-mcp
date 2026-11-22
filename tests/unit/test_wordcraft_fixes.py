@@ -64,6 +64,20 @@ def test_deep_heading_style_name_keeps_its_space():
     assert style == "Heading 4"
 
 
+def test_table_moves_the_caret_out_before_breaking_the_paragraph():
+    """`insert_table` leaves the caret in the last cell; a bare newParagraph would
+    open a paragraph inside the table and swallow the next block."""
+    steps = wb._block_steps({"kind": "table", "header": ["A"], "rows": [["1"]]})
+    assert [step["arguments"].get("command") for step in steps] == [
+        None,  # insert_table is a tool call, not an execute command
+        "caret.docEnd",
+        "text.newParagraph",
+    ]
+    assert steps[0]["tool"] == "insert_table"
+    assert steps[-2]["arguments"]["command"] == "caret.docEnd"
+    assert steps[-1] == NEW_PARAGRAPH
+
+
 # --- R2: one source of style steps ----------------------------------------
 
 

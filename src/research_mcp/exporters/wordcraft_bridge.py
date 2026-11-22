@@ -440,6 +440,9 @@ def _block_steps(block: dict) -> list[dict]:
         values = [block["header"], *block["rows"]]
         return [
             {"tool": "insert_table", "arguments": {"values": values, "header": True}},
+            # The caret stays inside the last cell, so leave the table first: a
+            # paragraph break there would put the next block inside the table.
+            _execute("caret.docEnd"),
             _NEW_PARA,
         ]
     if kind == "list":
