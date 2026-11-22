@@ -1,9 +1,11 @@
 """Translate one :class:`FormattingSpec` into engine-specific formatting steps.
 
-This is the single place that knows how an academic format maps onto WordCraft's
-engine commands, so styles, exporters and the handoff bridge never duplicate the
-mapping. Command ids and parameter shapes were verified against WordCraft's
-command list:
+This is the single place that knows how an academic format maps onto export
+backends, so styles, exporters and the handoff bridge never duplicate the
+mapping. The WordCraft side emits engine commands; the DOCX and LaTeX fallbacks
+consume the same spec so all three paths render one document identically.
+
+Command ids and parameter shapes were verified against WordCraft's command list:
 
 * style names carry a space: ``"Heading 1"``, not ``"Heading1"``;
 * page margins are **points** (``ParaProps.lineSpacing`` likewise uses points for
@@ -16,9 +18,18 @@ Everything returns a list of MCP tool steps shaped as
 caller can forward them to ``wordcraft.execute`` unchanged.
 """
 
-from research_mcp.styles.models import FormattingSpec
+import re
+from pathlib import Path
+
+from research_mcp.styles.models import FormattingSpec, SectionSpec
 
 CM_TO_PT = 28.3464567
+
+# A4 is the academic default; Letter is the only other paper size we support.
+_PAGE_SIZE_CM: dict[str, tuple[float, float]] = {
+    "A4": (21.0, 29.7),
+    "Letter": (21.59, 27.94),
+}
 
 # Page-number placement in FormattingSpec terms -> WordCraft header/footer slot.
 _PAGE_NUMBER_POSITIONS: dict[str, dict[str, str]] = {
@@ -109,3 +120,96 @@ def wordcraft_column_steps(fmt: FormattingSpec) -> list[dict]:
     if not fmt.two_column:
         return []
     return [_execute("layout.columns", {"count": 2})]
+
+
+def apply_docx_formatting(path: Path, fmt: FormattingSpec) -> None:
+    """Apply paper size, margins, Normal font/spacing to an exported `.docx` in place.
+
+    Pandoc's ``--reference-doc`` does not carry page margins reliably, so the
+    exporter re-applies them here. Justification goes on the ``Normal`` style
+    only: body paragraphs inherit it while ``Heading 1``..``Heading 3`` keep
+    their own alignment.
+    """
+    from docx import Document
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Cm, Pt
+
+    document = Document(str(path))
+    width_cm, height_cm = _PAGE_SIZE_CM[fmt.paper_size]
+    for section in document.sections:
+        section.page_width = Cm(width_cm)
+        section.page_height = Cm(height_cm)
+        section.top_margin = Cm(fmt.margin_cm["top"])
+        section.right_margin = Cm(fmt.margin_cm["right"])
+        section.bottom_margin = Cm(fmt.margin_cm["bottom"])
+        section.left_margin = Cm(fmt.margin_cm["left"])
+
+    normal = document.styles["Normal"]
+    normal.font.name = fmt.font_family
+    normal.font.size = Pt(fmt.font_size_pt)
+    normal.paragraph_format.line_spacing = fmt.line_spacing
+    if fmt.justify:
+        normal.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    document.save(str(path))
+
+
+def _format_cm(value_cm: float) -> str:
+    """Format a centimetre value for LaTeX, dropping a trailing ``.0``."""
+    return f"{value_cm:g}"
+
+
+def latex_metadata(fmt: FormattingSpec) -> dict[str, str]:
+    """Pandoc ``--metadata`` values for the LaTeX fallback.
+
+    Keys match the variables a Pandoc LaTeX template reads, so templates stay
+    unchanged and only the exported metadata varies per style.
+    """
+    margins = fmt.margin_cm
+    geometry = ",".join(
+        f"{side}={_format_cm(margins[side])}cm" for side in ("top", "right", "bottom", "left")
+    )
+    return {
+        "geometry": geometry,
+        "linestretch": str(fmt.line_spacing),
+        "fontsize": f"{int(fmt.font_size_pt)}pt",
+    }
+
+
+_HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+_BAB_PREFIX_RE = re.compile(r"^\s*bab\s+[ivxlcdm]+\b", re.IGNORECASE)
+_H1_RE = re.compile(r"^[ \t]*#(?!#)[ \t]*(.+?)[ \t]*$")
+_NON_ALNUM_RE = re.compile(r"[\W_]+", re.UNICODE)
+
+
+def _heading_key(text: str) -> str:
+    """Loose comparison key: no ``BAB <roman>`` prefix, punctuation or spaces."""
+    return _NON_ALNUM_RE.sub("", _BAB_PREFIX_RE.sub("", text)).casefold()
+
+
+def normalize_chapter_markdown(markdown: str, section: SectionSpec) -> str:
+    """Make a chapter's leading heading match the outline and drop guidance comments.
+
+    A leading ``# ...`` that loosely matches the section title or id (ignoring a
+    ``BAB <roman numeral>`` prefix, case, punctuation and spacing) is rewritten to
+    the canonical ``# {section.title}`` so exported chapters never carry ad-hoc
+    headings. An unmatched heading is preserved, and a draft without any leading
+    H1 gets one prepended. HTML comments from the skeleton guidance are stripped
+    so they cannot leak into an export.
+    """
+    lines = _HTML_COMMENT_RE.sub("", markdown).split("\n")
+    start = 0
+    while start < len(lines) and not lines[start].strip():
+        start += 1
+    lines = lines[start:]
+    if not lines:
+        return f"# {section.title}\n\n"
+
+    match = _H1_RE.match(lines[0])
+    if match is None:
+        return f"# {section.title}\n\n" + "\n".join(lines)
+
+    heading_key = _heading_key(match.group(1))
+    targets = {_heading_key(section.title), _heading_key(section.id)}
+    if heading_key and heading_key in targets:
+        lines[0] = f"# {section.title}"
+    return "\n".join(lines)
