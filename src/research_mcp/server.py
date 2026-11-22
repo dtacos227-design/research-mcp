@@ -1546,17 +1546,164 @@ def _wordcraft_recommendations(report: dict) -> list[str]:
     return items
 
 
+def _research_workflow_text(project_id: str, style_id: str = "article_imrad") -> str:
+    return f"""You are running the full Research MCP workflow for project {project_id!r}
+with the research style {style_id!r}.
+
+**Style intake → confirmed brief → chapter drafting → citation gate → export.**
+Every step is mandatory and ordered. Never skip the brief and never skip the
+citation gate before exporting.
+
+## Step 1 — Choose the style and read it
+
+1. If the user has not chosen a style yet, call `list_research_styles()` and present
+   each option's `id`, `label` and `description` so the user can pick one.
+2. Call `get_research_style({style_id!r})` and use its `outline` (section `id`,
+   `title`, `filename`, `order`, `guidance`), its `citation` default and its `export`
+   templates (`docx_template`, `latex_template`) as the plan for the rest of this
+   workflow.
+
+## Step 2 — Save the research brief (user-confirmed)
+
+The brief is the contract for the whole document and must be confirmed by the user
+before any file is written. Never invent or auto-fill an answer.
+
+Ask the user for each field, then call:
+
+```
+save_research_brief(
+    project_id={project_id!r},
+    style_id="<confirmed style id>",
+    title="<confirmed title>",
+    research_question="<confirmed research question>",
+    citation="<confirmed citation style>",
+)
+```
+
+- `citation` is required: always pass it explicitly. Offer the style's default
+  (`get_research_style` → `citation`) as the suggestion, but only save it once the
+  user confirms it.
+- Optional fields: `language`, `scope`, `target_length`, `deadline`.
+- If the result returns `status: "needs_input"`, ask the user about every field in
+  `missing` and call `save_research_brief` again with the confirmed answers.
+
+## Step 3 — Start the research
+
+Call `start_research({project_id!r})` and branch on `status`:
+
+- `needs_input` → **STOP.** Ask the user every question listed in `ask_user`, save
+  the answers with `save_research_brief` (including `citation`), then call
+  `start_research` again. Do not draft anything before the brief is complete.
+- `exists` → the listed chapters already hold content. Ask the user whether to
+  overwrite them, and only after explicit confirmation call
+  `start_research({project_id!r}, overwrite=True)`.
+- `created` → the skeleton chapters exist; continue with Step 4.
+
+## Step 4 — Fill every chapter from the style outline
+
+Work through the `outline` from `get_research_style({style_id!r})` in `order`:
+write each chapter and save it with
+`save_draft_section({project_id!r}, "<filename>", content, order=<order>)`,
+following the section's `guidance`.
+
+- Cite every claim with Pandoc citations: `[@citekey]`, `[@key1; @key2]`.
+- A citekey may only come from a paper saved in this project with
+  `save_paper_to_project` or `import_local_pdf`; read the evidence first with
+  `read_paper_section` / `search_local_library`.
+- Create figures with `generate_chart` and reference the file from the chapter.
+- Research the literature with `search_papers` / `get_citation_graph` /
+  `resolve_doi` when the library is still thin.
+
+## Step 5 — Citation gate (blocking)
+
+Call `verify_citations({project_id!r})` before any export.
+Every `[@citekey]` must resolve against the project library. If anything is listed
+as missing, fix or remove it and re-run the gate — do not proceed with unresolved
+citations.
+
+## Step 6 — Export according to the style
+
+The export inherits this project's style: omit `style=` and leave `csl_style` unset
+(or pass `csl_style=None`) unless the user explicitly asks for a different citation
+style, so the style's own `citation` wins.
+
+- Word document:
+  `export_to_docx({project_id!r}, "paper")` — the style's `export.docx_template`
+  applies the page setup and typography.
+- LaTeX / PDF:
+  `export_to_latex({project_id!r}, "paper", compile_pdf=True)` — the style's
+  `export.latex_template` is the default template; Tectonic compiles the PDF.
+- WordCraft MCP:
+  `prepare_wordcraft_handoff({project_id!r}, mode="live_authoring")` for a writing
+  blueprint, `mode="seed_docx"` for a seed DOCX, or `mode="batch_script"` for
+  `wordcraft-cli run --script`; then follow the `write_in_wordcraft` prompt for the
+  WordCraft execution and verification steps.
+
+## Zero-Hallucination Rule
+
+Every `[@citekey]` in every draft MUST correspond to a paper saved in this project.
+Never invent a citekey, a DOI, a finding or a reference entry. If the library does
+not support a sentence, remove the sentence or search for a real source first.
+"""
+
+
+# Public alias kept for prompt tests and callers that should not reach into privates.
+research_workflow_text = _research_workflow_text
+
+
+@mcp.prompt()
+def research_workflow(project_id: str, style_id: str = "article_imrad") -> str:
+    """Guide an AI through style intake, brief, drafting, citation gate and export."""
+    return _research_workflow_text(project_id, style_id)
+
+
 def _write_in_wordcraft_text(
     project_id: str,
-    csl_style: str = "apa",
+    csl_style: str | None = None,
     target_filename: str = "manuscript",
 ) -> str:
+    if csl_style:
+        style_line = (
+            f"**CSL style:** {csl_style!r} — explicit override, it wins over the "
+            "project style's citation"
+        )
+        handoff_call = (
+            f"prepare_wordcraft_handoff(\n"
+            f"    {project_id!r}, csl_style={csl_style!r}, "
+            'mode="live_authoring",\n)'
+        )
+        fallback_call = (
+            f'export_to_docx({project_id!r}, "{target_filename}", csl_style={csl_style!r})'
+        )
+    else:
+        style_line = (
+            "**CSL style:** inherited from the project's research style (recommended — "
+            "omit `csl_style` or pass `csl_style=None` so the style's citation wins)"
+        )
+        handoff_call = (
+            f'prepare_wordcraft_handoff({project_id!r}, mode="live_authoring")\n'
+            "# csl_style is omitted on purpose: the project style's citation wins."
+        )
+        fallback_call = f'export_to_docx({project_id!r}, "{target_filename}")'
+
     return f"""You are orchestrating Research MCP + WordCraft MCP to write a final document.
 
-**Project:** {project_id!r}  |  **CSL style:** {csl_style!r}
+**Project:** {project_id!r}
+{style_line}
 **Output:** {target_filename}.docx / {target_filename}.pdf
 
+This prompt covers the WordCraft handoff and execution. For the style intake, the
+confirmed brief, chapter drafting and the citation gate, follow the
+`research_workflow` prompt (Steps 1–5) first; come back here for Step 6.
+
 ---
+
+## Step 0 — Prerequisites (delegated to `research_workflow`)
+
+If the project has no complete brief or no drafts yet, run `research_workflow`:
+`list_research_styles` → `get_research_style` → `save_research_brief` →
+`start_research` → `save_draft_section` → `verify_citations`.
+Do not write a document from an unconfirmed brief.
 
 ## Step 1 — Check the environment
 
@@ -1571,10 +1718,15 @@ Call `check_wordcraft_env("{project_id}")`.
 
 ## Step 2 — Get the verified handoff
 
-Call `prepare_wordcraft_handoff("{project_id}", csl_style="{csl_style}", mode="live_authoring")`.
+```
+{handoff_call}
+```
+
+The style is inherited from the project (page setup, chapter order and citation
+default), so leave `csl_style` unset unless the user asked for an override.
 
 Stop immediately if `cited_but_missing` is non-empty — do NOT write a document that
-silently drops citations.
+silently drops citations. Re-run `verify_citations` after fixing the drafts.
 
 ## Step 3 — Execute the blueprint
 
@@ -1601,13 +1753,28 @@ The result carries `tool_sequence`, a list of WordCraft calls. Execute them in o
 
 ## Fallback (no WordCraft available)
 
-Call `export_to_docx("{project_id}", "{target_filename}", csl_style="{csl_style}")`.
+Call `{fallback_call}`.
 """
 
 
 def _systematic_literature_review_text(topic: str, year_from: int) -> str:
     return f"""You are conducting a systematic literature review on: {topic!r}.
 Include papers from {year_from} onwards.
+
+For the generic, style-driven version of this flow see the `research_workflow` prompt.
+
+## Step 0 — Prepare the project and the brief
+
+1. `create_project(name)` — reuse an existing project instead if the user has one
+   (`list_projects()`).
+2. `list_research_styles()` — show the available styles and let the user choose
+   (e.g. `rapid_synthesis`, `annotated_bibliography`, `article_imrad`).
+3. `get_research_style(style_id)` — read the outline and guidance.
+4. `save_research_brief(project_id, style_id=..., title=..., research_question=...,
+   citation=...)` with answers **confirmed by the user** — `citation` must be passed
+   explicitly and never auto-filled.
+5. `start_research(project_id)` — if it returns `needs_input`, stop and ask the user
+   the listed questions; if it returns `exists`, confirm overwriting with the user.
 
 ## Step 1 — Discover literature
 
@@ -1641,7 +1808,9 @@ For each paper you decide to include:
 
 ## Step 4 — Write the draft
 
-Write each chapter as a separate Markdown file using `[@citekey]` citations:
+Write each chapter as a separate Markdown file using `[@citekey]` citations. The
+filename and order of every chapter come from the chosen style's `outline`; the
+default IMRaD-style example is:
 1. `save_draft_section(project_id, "00_abstract.md", content, order=0)`
 2. `save_draft_section(project_id, "01_introduction.md", content, order=1)`
 3. `save_draft_section(project_id, "02_methodology.md", content, order=2)` —
@@ -1677,15 +1846,24 @@ def _draft_latex_paper_text(project_id: str, template_name: str) -> str:
     return f"""You are drafting a LaTeX research paper for project {project_id!r}
 using the {template_name!r} template.
 
+This prompt is the LaTeX tail of the generic `research_workflow`: for style intake,
+the user-confirmed brief, `start_research` and chapter-by-chapter drafting, follow
+the `research_workflow` prompt (Steps 1–4) instead of inventing your own structure.
+`export_to_latex` returns `precondition_failed` until the brief is complete and at
+least one paper is saved — fix that with `save_research_brief` first.
+
 ## Step 1 — Survey the project
 
 1. `get_project_status({project_id!r})` — see existing drafts, papers, assets.
 2. `generate_bibliography({project_id!r})` — ensure `references.bib` and
    `references.csl.json` are up to date.
+3. If the brief is still incomplete: `list_research_styles()` → `get_research_style`
+   → `save_research_brief` (user-confirmed, `citation` included).
 
 ## Step 2 — Write IMRaD sections
 
-If not already present, create each section with `save_draft_section`:
+If not already present, create each section with `save_draft_section`. The filenames
+and order come from the project style's `outline`; the IMRaD example is:
 
 - `save_draft_section({project_id!r}, "00_abstract.md", content, order=0)`
   — 150–250 words.
@@ -1706,6 +1884,10 @@ If not already present, create each section with `save_draft_section`:
    Fix any unknown `[@citekey]` before continuing.
 
 ## Step 4 — Compile the LaTeX paper
+
+The project's research style supplies the page geometry and typography, so omit
+`style=` and leave `template_name` unset unless the user explicitly asked for
+{template_name!r} (the style's `export.latex_template` is the default):
 
 ```
 export_to_latex(
@@ -1728,7 +1910,8 @@ Tectonic auto-downloads required TeX packages — no TeX Live installation neede
 
 1. The compiled `.pdf` and `.tex` are in `exports/` inside the project workspace.
 2. For final polish with WordCraft MCP:
-   `prepare_wordcraft_handoff({project_id!r}, mode="seed_docx")`
+   `prepare_wordcraft_handoff({project_id!r}, mode="seed_docx")` — omit `csl_style`
+   so the style's citation wins. Then continue with the `write_in_wordcraft` prompt.
 
 ## Zero-Hallucination Rule
 
@@ -1745,7 +1928,7 @@ def draft_latex_paper(project_id: str, template_name: str = "ieee") -> str:
 @mcp.prompt()
 def write_in_wordcraft(
     project_id: str,
-    csl_style: str = "apa",
+    csl_style: str | None = None,
     target_filename: str = "manuscript",
 ) -> str:
     """Guide an AI through the full Research MCP → WordCraft MCP writing workflow."""
