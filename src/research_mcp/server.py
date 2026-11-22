@@ -259,6 +259,35 @@ async def get_research_brief(project_id: str) -> dict:
 
 
 @mcp.tool()
+async def list_research_styles() -> dict:
+    """List every available research style with its outline sections.
+
+    Styles are bundled with the package and can be overridden or extended with
+    YAML files in `~/.research-mcp/styles`; `id` is what `save_research_brief`
+    expects for `style_id`.
+    """
+    try:
+        return {"styles": list_styles()}
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(f"Could not list the research styles: {type(exc).__name__}: {exc}") from exc
+
+
+@mcp.tool()
+async def get_research_style(style_id: str) -> dict:
+    """Return one style's full specification: outline, citation and formatting."""
+    try:
+        return {"style": get_style(style_id).model_dump()}
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(
+            f"Could not read the research style {style_id!r}: {type(exc).__name__}: {exc}"
+        ) from exc
+
+
+@mcp.tool()
 async def start_research(project_id: str, overwrite: bool = False) -> dict:
     """Check the intake gate and start the research once the brief is complete.
 
@@ -834,6 +863,22 @@ def _warnings_for_extra_drafts(extra_files: list[str]) -> list[str]:
     return [f"Exported draft(s) not in the style outline: {', '.join(extra_files)}"]
 
 
+def _warnings_for_heading_numbering(style: StyleSpec) -> list[str]:
+    """Report that heading numbers come from the draft, not from WordCraft.
+
+    Modes without a blueprint (seed DOCX and job script) get this caveat here;
+    `live_authoring` already receives the equivalent note from `build_blueprint`
+    via `_style_warnings`, so callers must not add a second copy.
+    """
+    if style.formatting.heading_numbering == "none":
+        return []
+    return [
+        "Heading numbering (BAB I / 1.1) is taken from the draft text; WordCraft does "
+        "not renumber headings. Ensure each chapter's heading is written as the style "
+        "requires."
+    ]
+
+
 def _warnings_for_two_column(style: StyleSpec, latex_name: str) -> list[str]:
     """Report that the bundled LaTeX templates cannot honor a two-column style."""
     if not style.formatting.two_column:
@@ -1284,10 +1329,11 @@ def _handoff_warnings(missing: list[str], bibliography: dict | None) -> list[str
 @mcp.tool()
 async def prepare_wordcraft_handoff(
     project_id: str,
-    csl_style: str = "apa",
+    csl_style: str | None = None,
     mode: Literal["live_authoring", "seed_docx", "batch_script"] = "live_authoring",
     strict_citations: bool = True,
     output_name: str = "manuscript",
+    style: str | None = None,
 ) -> dict:
     """Hand a citation-verified draft to WordCraft as a blueprint, a seed DOCX or a job script.
 
@@ -1295,6 +1341,12 @@ async def prepare_wordcraft_handoff(
     parsed blocks plus the exact WordCraft tool sequence that writes them. `seed_docx`
     exports a `.docx` to open with `open_document`. `batch_script` writes
     `scripts/job.json` for `wordcraft-cli run --script`.
+
+    The research style (`style`, else the project's, else the default) decides the
+    chapter merge order, page setup and citation default; an explicit `csl_style`
+    still wins over the style's citation. The handoff refuses to run until the
+    research brief is complete and at least one paper is saved, returning
+    `precondition_failed` plus the resolved `style_id` and remediation steps.
     """
     try:
         if mode not in _HANDOFF_MODES:
@@ -1306,17 +1358,21 @@ async def prepare_wordcraft_handoff(
         conn = await get_connection(settings.db_path)
         try:
             project = await _get_project_or_raise(conn, project_id)
+            resolved_style = await _resolve_style_for_export(conn, project_id, style)
+            blocked = await _precondition_failed(conn, project_id, resolved_style)
+            if blocked is not None:
+                return {**blocked, "style_id": resolved_style.id}
+
             project_dir = _project_dir(settings, project)
             exports_dir = project_dir / "exports"
-            sections = await repository.list_draft_sections(conn, project.id)
-            markdown = _draft_markdown_or_raise(merge_draft_markdown(project_dir, sections))
-            missing = await _citation_gate(conn, project.id, markdown, strict_citations)
+            effective_csl = csl_style or resolved_style.citation
 
             result: dict = {
                 "project_id": project.id,
                 "mode": mode,
-                "csl_style": csl_style,
-                "cited_but_missing": missing,
+                "style_id": resolved_style.id,
+                "csl_style": effective_csl,
+                "cited_but_missing": [],
                 "handoff_markdown_path": None,
                 "seed_docx_path": None,
                 "script_path": None,
@@ -1328,8 +1384,12 @@ async def prepare_wordcraft_handoff(
             }
 
             if mode == "live_authoring":
+                sections = await repository.list_draft_sections(conn, project.id)
+                markdown, extra_files = _style_merge_markdown(project_dir, sections, resolved_style)
+                markdown = _draft_markdown_or_raise(markdown)
+                missing = await _citation_gate(conn, project.id, markdown, strict_citations)
                 output = _export_target(project_dir, f"{stem}-handoff", ".md")
-                csl_name = resolve_csl(csl_style)
+                csl_name = resolve_csl(effective_csl)
                 bib_path, _csl_json = await _refresh_bibliography(conn, project.id, project_dir)
                 with bundled_template(f"csl/{csl_name}.csl") as csl_path:
                     render_markdown(
@@ -1346,32 +1406,36 @@ async def prepare_wordcraft_handoff(
                     output,
                     rendered,
                     assets,
-                    csl_style,
+                    effective_csl,
                     exports_dir,
                     stem,
                     project_dir=project_dir,
+                    style=resolved_style,
                 )
                 result.update(
                     {
+                        "cited_but_missing": missing,
                         "handoff_markdown_path": str(output),
                         "blueprint": blueprint,
                         "assets": blueprint["assets"],
                         "tool_sequence": blueprint["tool_sequence"],
                         "warnings": [
+                            # build_blueprint already carries the style's heading
+                            # numbering caveat; do not repeat it here.
                             *blueprint["warnings"],
                             *_handoff_warnings(missing, blueprint["bibliography"]),
+                            *_warnings_for_extra_drafts(extra_files),
                         ],
                     }
                 )
                 return result
 
-            resolved_style = await _resolve_style_for_export(conn, project_id, None)
-            seed_docx, missing, _extra_files = await _render_docx_export(
+            seed_docx, missing, extra_files = await _render_docx_export(
                 conn,
                 project,
                 project_dir,
                 stem,
-                csl_style,
+                effective_csl,
                 "default_academic",
                 True,
                 strict_citations,
@@ -1379,21 +1443,30 @@ async def prepare_wordcraft_handoff(
             )
             result["seed_docx_path"] = str(seed_docx)
             result["cited_but_missing"] = missing
+            numbering = _warnings_for_heading_numbering(resolved_style)
 
             if mode == "seed_docx":
                 result.update(
                     {
                         "tool_sequence": wordcraft_bridge.build_polish_sequence(
-                            seed_docx, csl_style, exports_dir, stem
+                            seed_docx,
+                            effective_csl,
+                            exports_dir,
+                            stem,
+                            style=resolved_style,
                         ),
-                        "warnings": _handoff_warnings(missing, None),
+                        "warnings": [
+                            *_handoff_warnings(missing, None),
+                            *_warnings_for_extra_drafts(extra_files),
+                            *numbering,
+                        ],
                     }
                 )
                 return result
 
             script = wordcraft_bridge.build_job_script(
                 seed_docx,
-                csl_style,
+                effective_csl,
                 exports_dir / f"{stem}.docx",
                 exports_dir / f"{stem}.pdf",
             )
@@ -1413,6 +1486,8 @@ async def prepare_wordcraft_handoff(
                     ],
                     "warnings": [
                         *_handoff_warnings(missing, None),
+                        *_warnings_for_extra_drafts(extra_files),
+                        *numbering,
                         "Run the command above with `wordcraft-cli` and no automation "
                         "roots: the job script already names absolute paths.",
                     ],
@@ -1737,6 +1812,16 @@ async def resource_projects() -> str:
     finally:
         await conn.close()
     return json.dumps(rows, indent=2, ensure_ascii=False)
+
+
+@mcp.resource(
+    "research://styles",
+    name="styles",
+    description="All available research styles and their outline sections",
+)
+async def resource_styles() -> str:
+    """Return JSON list of every research style, bundled and user-defined."""
+    return json.dumps(list_styles(), indent=2, ensure_ascii=False)
 
 
 @mcp.resource(

@@ -16,9 +16,9 @@ import pytest_asyncio
 
 from research_mcp.config import get_settings
 from research_mcp.db.database import get_connection
-from research_mcp.db.repository import create_project, save_paper_and_sections
+from research_mcp.db.repository import create_project, save_paper_and_sections, set_project_brief
 from research_mcp.exporters.wordcraft_bridge import detect_wordcraft_cli
-from research_mcp.models import PaperModel
+from research_mcp.models import PaperModel, ResearchBrief
 from research_mcp.server import prepare_wordcraft_handoff, save_draft_section
 
 SKIP_NO_WORDCRAFT = pytest.mark.skipif(
@@ -55,6 +55,13 @@ async def e2e_project(tmp_path, monkeypatch):
         created_at="2023-01-01T00:00:00Z",
     )
     await save_paper_and_sections(conn, project.id, paper, sections=None)
+    brief = ResearchBrief(
+        style_id="article_imrad",
+        title="Neural Advances",
+        research_question="Do neural networks advance?",
+        citation="apa",
+    )
+    await set_project_brief(conn, project.id, brief.model_dump_json(), "article_imrad")
     await conn.close()
 
     await save_draft_section(

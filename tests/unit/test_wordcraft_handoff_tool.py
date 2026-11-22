@@ -7,8 +7,12 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from research_mcp.config import get_settings
 from research_mcp.db.database import get_connection
-from research_mcp.db.repository import create_project, save_paper_and_sections
-from research_mcp.models import PaperModel
+from research_mcp.db.repository import (
+    create_project,
+    save_paper_and_sections,
+    set_project_brief,
+)
+from research_mcp.models import PaperModel, ResearchBrief
 from research_mcp.server import prepare_wordcraft_handoff, save_draft_section
 
 
@@ -30,6 +34,13 @@ async def _make_project(*, bad_citation: bool, chart: bool = False):
         created_at="2024-01-01T00:00:00Z",
     )
     await save_paper_and_sections(conn, project.id, paper, sections=None)
+    brief = ResearchBrief(
+        style_id="article_imrad",
+        title="T",
+        research_question="Q",
+        citation="apa",
+    )
+    await set_project_brief(conn, project.id, brief.model_dump_json(), "article_imrad")
     await conn.close()
 
     project_dir = settings.workspace_dir / project.slug
@@ -298,6 +309,31 @@ async def test_empty_draft_rejected(tmp_path, monkeypatch):
     settings = get_settings()
     conn = await get_connection(settings.db_path)
     project = await create_project(conn, settings.workspace_dir, "Empty")
+    await save_paper_and_sections(
+        conn,
+        project.id,
+        PaperModel(
+            id="p-empty",
+            project_id=project.id,
+            citekey="doe2024empty",
+            doi="10.1/empty",
+            title="Empty Paper",
+            authors=["Jane Doe"],
+            authors_structured=[{"given": "Jane", "family": "Doe", "literal": None}],
+            year=2024,
+            venue="Nature",
+            item_type="journal-article",
+            created_at="2024-01-01T00:00:00Z",
+        ),
+        sections=None,
+    )
+    brief = ResearchBrief(
+        style_id="article_imrad",
+        title="T",
+        research_question="Q",
+        citation="apa",
+    )
+    await set_project_brief(conn, project.id, brief.model_dump_json(), "article_imrad")
     await conn.close()
     with pytest.raises(ToolError, match="no draft chapters"):
         await prepare_wordcraft_handoff(project.id)
