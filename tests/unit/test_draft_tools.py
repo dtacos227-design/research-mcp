@@ -4,7 +4,8 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from research_mcp.config import get_settings
 from research_mcp.db.database import get_connection
-from research_mcp.db.repository import create_project, list_draft_sections
+from research_mcp.db.repository import create_project, list_draft_sections, set_project_brief
+from research_mcp.models import ResearchBrief
 from research_mcp.server import read_draft_section, save_draft_section
 
 
@@ -17,6 +18,13 @@ async def project_db(tmp_path, monkeypatch):
     settings = get_settings()
     conn = await get_connection(settings.db_path)
     project = await create_project(conn, settings.workspace_dir, "Draft Tools")
+    brief = ResearchBrief(
+        style_id="article_imrad",
+        title="Draft Tools",
+        research_question="Does drafting require a brief?",
+        citation="apa",
+    )
+    await set_project_brief(conn, project.id, brief.model_dump_json(), "article_imrad")
     await conn.close()
     return project, workspace_root
 
@@ -34,6 +42,25 @@ async def test_save_and_read_draft_section(project_db):
     assert saved["word_count"] == len(content.split())
     assert read_back["content"] == content
     assert (workspace_root / project.slug / "drafts" / "01_abstract.md").exists()
+
+
+@pytest.mark.asyncio
+async def test_save_draft_without_brief_returns_needs_input(project_db):
+    project, workspace_root = project_db
+    settings = get_settings()
+    conn = await get_connection(settings.db_path)
+    try:
+        unbriefed = await create_project(conn, settings.workspace_dir, "Unbriefed")
+    finally:
+        await conn.close()
+
+    result = await save_draft_section(unbriefed.id, "01_abstract.md", "# Abstract\n\nBody.")
+
+    assert result["status"] == "needs_input"
+    assert result["missing"] == ["style_id", "title", "research_question", "citation"]
+    assert result["ask_user"]
+    assert result["defaults"]["citation"] == "apa"
+    assert not (workspace_root / unbriefed.slug / "drafts" / "01_abstract.md").exists()
 
 
 @pytest.mark.asyncio

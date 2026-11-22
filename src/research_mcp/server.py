@@ -526,12 +526,28 @@ async def save_draft_section(
     content: str,
     order: int | None = None,
 ) -> dict:
-    """Save or update a draft Markdown chapter (e.g. 01_abstract.md) in this project."""
+    """Save or update a draft Markdown chapter (e.g. 01_abstract.md) in this project.
+
+    Drafting is gated on the research brief (spec §6.5): an incomplete brief
+    returns `needs_input` with the questions to ask and writes nothing, so no
+    chapter can be started before the user has confirmed the intake.
+    """
     try:
         settings = get_settings()
         conn = await get_connection(settings.db_path)
         try:
-            project = await repository.get_project(conn, project_id)
+            project = await _get_project_or_raise(conn, project_id)
+            stored = await repository.get_project_brief(conn, project_id)
+            brief = ResearchBrief.model_validate(stored or {})
+            missing = brief.missing()
+            if missing:
+                style = await _resolve_style_for_export(conn, project_id, brief.style_id)
+                return {
+                    "status": "needs_input",
+                    "missing": missing,
+                    "ask_user": _ask_user_prompts(missing, style),
+                    "defaults": {"citation": style.citation, "language": brief.language},
+                }
             return await draft_manager.write_draft_section(
                 conn, project_id, _project_dir(settings, project), filename, content, order
             )
