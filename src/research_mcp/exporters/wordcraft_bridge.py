@@ -19,7 +19,7 @@ from pathlib import Path
 from mcp.server.mcpserver.exceptions import ToolError
 
 from research_mcp.exporters import formatting
-from research_mcp.styles.models import FormattingSpec
+from research_mcp.styles.models import FormattingSpec, StyleSpec
 
 DEFAULT_PORT = 7981
 WORDCRAFT_AUTHOR = "Research Agent"
@@ -413,6 +413,39 @@ def _style_steps(fmt: FormattingSpec | None = None) -> list[dict]:
     return formatting.wordcraft_style_steps(fmt or FormattingSpec())
 
 
+def _page_setup_steps(fmt: FormattingSpec) -> list[dict]:
+    """Paper size, margins, page numbers and columns for one section.
+
+    Page setup is emitted right after the style definitions and before any
+    content, so the document is already A4/Letter with the style's margins and
+    numbering when the first heading is typed.
+    """
+    return [
+        *formatting.wordcraft_page_steps(fmt),
+        *formatting.wordcraft_column_steps(fmt),
+    ]
+
+
+def _style_warnings(style: StyleSpec) -> list[str]:
+    """Note the style fields WordCraft cannot enforce by itself.
+
+    WordCraft expresses paper size, margins, spacing, fonts, page numbering and
+    two-column layout directly (``layout.*``/``styles.modify``). Heading
+    numbering is different: the engine keeps whatever heading text it is given,
+    so ``BAB I``/``1.1`` prefixes come from the draft (via
+    `normalize_chapter_markdown`), never from WordCraft itself.
+    """
+    fmt = style.formatting
+    if fmt.heading_numbering == "none":
+        return []
+    return [
+        f"WordCraft does not apply heading numbering ({fmt.heading_numbering}): it keeps "
+        "each outline heading exactly as written, so there is no automatic BAB I/1.1 "
+        "renumbering. Number the headings in the draft (Research MCP does this from the "
+        "style outline) before handoff."
+    ]
+
+
 def _block_steps(block: dict) -> list[dict]:
     kind = block["kind"]
     if kind == "heading":
@@ -515,7 +548,11 @@ def _bibliography_steps(bibliography: dict) -> list[dict]:
         {"tool": "type_text", "arguments": {"text": bibliography["title"]}},
         _execute("para.heading1"),
         {"tool": "type_text", "arguments": {"text": entries, "paragraphs": True}},
+        # The entries are generated content: jump to the end and start a fresh
+        # paragraph so whatever follows (strict report, page render, save) never
+        # appends to the last reference entry.
         _execute("caret.docEnd"),
+        _NEW_PARA,
     ]
 
 
@@ -529,8 +566,15 @@ def build_blueprint(
     output_stem: str,
     *,
     project_dir: Path | None = None,
+    style: StyleSpec | None = None,
 ) -> dict:
-    """Turn Citeproc-rendered Markdown into blocks plus the WordCraft calls that write them."""
+    """Turn Citeproc-rendered Markdown into blocks plus the WordCraft calls that write them.
+
+    With `style`, the sequence opens with that style's Normal/Heading definitions
+    and page setup (paper size, margins, page numbers, columns) before any content,
+    and `warnings` names the fields WordCraft cannot enforce itself. Without it the
+    default A4/Times format is used, exactly as before.
+    """
     root = project_dir or (exports_dir.parent if exports_dir.name == "exports" else exports_dir)
     parsed = parse_markdown_blocks(markdown, root)
     blocks, bibliography = split_bibliography(parsed)
@@ -540,12 +584,16 @@ def build_blueprint(
         if block["kind"] == "figure" and not block["exists"]
     ]
 
+    fmt = style.formatting if style is not None else None
     steps: list[dict] = [
         {"tool": "new_document", "arguments": {"template": "blank"}},
         _execute("file.setAuthor", {"name": WORDCRAFT_AUTHOR}),
-        *_style_steps(),
+        *_style_steps(fmt),
+        *(_page_setup_steps(fmt) if fmt is not None else []),
         _execute("references.citationStyle", {"style": citation_style_for(csl_style)}),
     ]
+    if style is not None:
+        warnings.extend(_style_warnings(style))
     for block in blocks:
         steps.extend(_block_steps(block))
     steps.extend(_bibliography_steps(bibliography))
@@ -625,13 +673,22 @@ def build_polish_sequence(
     csl_style: str,
     exports_dir: Path,
     output_stem: str,
+    *,
+    style: StyleSpec | None = None,
 ) -> list[dict]:
-    """The WordCraft calls that polish a seed DOCX: styles, TOC, strict check, save."""
+    """The WordCraft calls that polish a seed DOCX: styles, TOC, strict check, save.
+
+    With `style`, its page setup (paper size, margins, page numbers, columns) is
+    applied right after the style definitions and before the TOC, so the seed
+    document is re-laid out to the style rather than staying at its own defaults.
+    """
+    fmt = style.formatting if style is not None else None
     return [
         {"tool": "open_document", "arguments": {"path": str(seed_docx)}},
         {"tool": "inspect_document", "arguments": {}},
         _execute("file.setAuthor", {"name": WORDCRAFT_AUTHOR}),
-        *_style_steps(),
+        *_style_steps(fmt),
+        *(_page_setup_steps(fmt) if fmt is not None else []),
         _execute("references.citationStyle", {"style": citation_style_for(csl_style)}),
         _execute("references.toc", {"levels": 3, "title": "Contents"}),
         _execute("caret.docEnd"),
