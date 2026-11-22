@@ -1,4 +1,5 @@
 import contextlib
+import functools
 import os
 import re
 import sys
@@ -12,10 +13,14 @@ import pymupdf
 import pymupdf4llm
 from pydantic import BaseModel
 
+from research_mcp.config import get_settings
+
 MAX_PDF_BYTES = 100 * 1024 * 1024
 MAX_REDIRECTS = 5
 PDF_SIGNATURE = b"%PDF-"
 REDIRECT_STATUSES = {301, 302, 303, 307, 308}
+OCR_MIN_TEXT_CHARS = 40
+OCR_DPI = 300
 
 
 class PdfMetadata(BaseModel):
@@ -167,15 +172,76 @@ def _markdown_text(result: str | list[dict]) -> str:
     return "\n\n".join(chunks)
 
 
+@functools.lru_cache(maxsize=1)
+def _tesseract_available() -> bool:
+    """True bila Tesseract + tessdata bisa dipakai PyMuPDF (di-cache sekali)."""
+    try:
+        pymupdf.get_tessdata()
+    except Exception:
+        return False
+    return True
+
+
+def _ocr_pages(pdf_path: Path, page_numbers: list[int], language: str) -> dict[int, str]:
+    """OCR satu set halaman dengan Tesseract; kegagalan per halaman ditelan.
+
+    Halaman yang sudah punya text layer dilewati: teks digital selalu lebih
+    dipercaya daripada hasil OCR, berapa pun panjangnya.
+    """
+    texts: dict[int, str] = {}
+    with _parser_messages_to_stderr(), pymupdf.open(pdf_path) as document:
+        for page_number in page_numbers:
+            try:
+                page = document[page_number - 1]
+                if page.get_text().strip():
+                    continue
+                textpage = page.get_textpage_ocr(language=language, dpi=OCR_DPI, full=True)
+                texts[page_number] = textpage.extractText()
+            except Exception as exc:  # OCR opsional: jangan pernah gagalkan tool
+                print(f"Tesseract OCR skipped on page {page_number}: {exc}", file=sys.stderr)
+    return texts
+
+
+def _ocr_thin_pages(chunks: list[dict], pdf_path: Path, language: str) -> list[dict]:
+    """Ganti teks halaman tipis dengan hasil OCR Tesseract."""
+    thin = [
+        chunk["metadata"]["page_number"]
+        for chunk in chunks
+        if isinstance(chunk.get("text"), str)
+        and len(chunk["text"].strip()) < OCR_MIN_TEXT_CHARS
+        and isinstance(chunk.get("metadata"), dict)
+        and isinstance(chunk["metadata"].get("page_number"), int)
+    ]
+    if not thin:
+        return chunks
+    try:
+        replacements = _ocr_pages(pdf_path, thin, language)
+    except Exception as exc:  # OCR opsional: jangan pernah gagalkan tool
+        print(f"Tesseract OCR skipped for pages {thin}: {exc}", file=sys.stderr)
+        return chunks
+    for chunk in chunks:
+        metadata = chunk.get("metadata")
+        page_number = metadata.get("page_number") if isinstance(metadata, dict) else None
+        if not isinstance(page_number, int):
+            continue
+        text = replacements.get(page_number, "").strip()
+        if text:
+            chunk["text"] = text
+    return chunks
+
+
 def extract_markdown(pdf_path: Path, project_dir: Path) -> str:
     resolved_path = _project_path(pdf_path, project_dir)
     _validate_pdf_file(resolved_path)
+    settings = get_settings()
     with _parser_messages_to_stderr():
         result = pymupdf4llm.to_markdown(
             str(resolved_path),
             page_chunks=True,
             show_progress=False,
         )
+    if isinstance(result, list) and settings.ocr_fallback and _tesseract_available():
+        result = _ocr_thin_pages(result, resolved_path, settings.ocr_language)
     return _markdown_text(result)
 
 

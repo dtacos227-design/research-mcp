@@ -75,6 +75,27 @@ uv run research-mcp
 
 Kompatibel dengan **Claude Code**, **OpenCode**, **Codex**, dan **Agy**.
 
+### OCR PDF hasil scan
+
+`uv sync` sudah memasang **RapidOCR** (model ONNX PP-OCRv6 ikut di dalam wheel), jadi
+PDF hasil scan ter-OCR otomatis — tidak ada unduhan model saat runtime dan tidak ada
+API key. Varian `rapidocr-onnxruntime` tidak dipakai karena butuh Python < 3.13.
+
+Opsional, sebagai lapis kedua: pasang **Tesseract** agar halaman yang teksnya tipis
+(< 40 karakter setelah OCR default) di-OCR ulang dengan model bahasa Tesseract.
+
+```bash
+brew install tesseract tesseract-lang   # macOS: menyediakan data bahasa ind + eng
+# Debian/Ubuntu: sudo apt install tesseract-ocr tesseract-ocr-ind
+```
+
+| Env var | Default | Arti |
+| :--- | :--- | :--- |
+| `RESEARCH_MCP_OCR_LANGUAGE` | `ind+eng` | Bahasa Tesseract untuk lapis kedua |
+| `RESEARCH_MCP_OCR_FALLBACK` | `true` | Set `false` untuk mematikan lapis kedua |
+
+Tanpa Tesseract terpasang, semuanya tetap jalan: lapis kedua dilewati tanpa error.
+
 ## Lisensi
 
 MIT

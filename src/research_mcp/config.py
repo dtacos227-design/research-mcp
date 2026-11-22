@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     db_path: Path | None = Field(default=None, validation_alias="RESEARCH_MCP_DB_PATH")
     email: str | None = Field(default=None, validation_alias="RESEARCH_MCP_EMAIL")
     log_level: str = Field(default="INFO", validation_alias="RESEARCH_MCP_LOG_LEVEL")
+    ocr_language: str = Field(default="ind+eng", validation_alias="RESEARCH_MCP_OCR_LANGUAGE")
+    ocr_fallback: bool = Field(default=True, validation_alias="RESEARCH_MCP_OCR_FALLBACK")
 
     @field_validator("workspace_dir", mode="after")
     @classmethod

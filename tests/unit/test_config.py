@@ -82,3 +82,24 @@ def test_configure_logging_is_idempotent():
     first_count = len(root.handlers)
     configure_logging("INFO")
     assert len(root.handlers) == first_count
+
+
+def test_ocr_language_defaults_to_ind_eng(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("RESEARCH_MCP_OCR_LANGUAGE", raising=False)
+    assert Settings().ocr_language == "ind+eng"
+
+
+def test_ocr_language_read_from_env(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("RESEARCH_MCP_OCR_LANGUAGE", "eng")
+    assert Settings().ocr_language == "eng"
+
+
+def test_ocr_fallback_defaults_true_and_reads_env(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("RESEARCH_MCP_OCR_FALLBACK", raising=False)
+    assert Settings().ocr_fallback is True
+
+    monkeypatch.setenv("RESEARCH_MCP_OCR_FALLBACK", "false")
+    assert Settings().ocr_fallback is False
