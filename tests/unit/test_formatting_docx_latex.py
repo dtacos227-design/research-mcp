@@ -75,8 +75,22 @@ def test_apply_docx_leaves_alignment_alone_when_not_justified(tmp_path):
     path = _blank_docx(tmp_path)
     formatting.apply_docx_formatting(path, FormattingSpec(justify=False))
 
-    normal = Document(str(path)).styles["Normal"]
-    assert normal.paragraph_format.alignment != WD_ALIGN_PARAGRAPH.JUSTIFY
+    document = Document(str(path))
+    assert document.styles["Normal"].paragraph_format.alignment != WD_ALIGN_PARAGRAPH.JUSTIFY
+    # justify=False must not start pinning heading alignment either.
+    for name in ("Heading 1", "Heading 2", "Heading 3"):
+        assert document.styles[name].paragraph_format.alignment != WD_ALIGN_PARAGRAPH.LEFT
+
+
+def test_apply_docx_keeps_justify_out_of_heading_styles(tmp_path):
+    path = _blank_docx(tmp_path)
+    formatting.apply_docx_formatting(path, FormattingSpec(justify=True))
+
+    document = Document(str(path))
+    assert document.styles["Normal"].paragraph_format.alignment == WD_ALIGN_PARAGRAPH.JUSTIFY
+    for name in ("Heading 1", "Heading 2", "Heading 3"):
+        alignment = document.styles[name].paragraph_format.alignment
+        assert alignment == WD_ALIGN_PARAGRAPH.LEFT, f"{name} inherits justify"
 
 
 def test_apply_docx_saves_in_place(tmp_path):

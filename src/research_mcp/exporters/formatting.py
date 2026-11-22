@@ -126,9 +126,10 @@ def apply_docx_formatting(path: Path, fmt: FormattingSpec) -> None:
     """Apply paper size, margins, Normal font/spacing to an exported `.docx` in place.
 
     Pandoc's ``--reference-doc`` does not carry page margins reliably, so the
-    exporter re-applies them here. Justification goes on the ``Normal`` style
-    only: body paragraphs inherit it while ``Heading 1``..``Heading 3`` keep
-    their own alignment.
+    exporter re-applies them here. Justification goes on the ``Normal`` style so
+    body paragraphs inherit it; the heading styles (``basedOn`` Normal and
+    without their own ``jc``) are explicitly pinned left so wrapped chapter
+    headings never inherit justified spacing.
     """
     from docx import Document
     from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -150,6 +151,15 @@ def apply_docx_formatting(path: Path, fmt: FormattingSpec) -> None:
     normal.paragraph_format.line_spacing = fmt.line_spacing
     if fmt.justify:
         normal.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        # Heading styles are basedOn Normal and carry no own jc, so they would
+        # inherit justification and stretch wrapped chapter headings. Pin them
+        # left; absent styles (custom templates) are simply skipped.
+        for name in ("Heading 1", "Heading 2", "Heading 3"):
+            try:
+                heading = document.styles[name]
+            except KeyError:
+                continue
+            heading.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
     document.save(str(path))
 
 
