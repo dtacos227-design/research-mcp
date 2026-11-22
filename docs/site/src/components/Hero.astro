@@ -1,0 +1,83 @@
+---
+---
+
+<section id="hero"
+  class="relative min-h-screen flex flex-col items-center justify-center px-6 text-center overflow-hidden">
+
+  <!-- Floating particles (CSS animated, no JS) -->
+  <div class="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+    {Array.from({ length: 18 }).map((_, i) => (
+      <span
+        class="absolute w-1.5 h-1.5 rounded-full"
+        style={`
+          background-color: #C4954A;
+          left: ${5 + i * 5.3}%;
+          top: ${10 + (i % 7) * 12}%;
+          animation: float ${3 + (i % 4)}s ease-in-out ${(i * 0.4).toFixed(1)}s infinite;
+          opacity: 0.3;
+        `}
+      />
+    ))}
+  </div>
+
+  <!-- Tagline -->
+  <p class="font-heading text-xs uppercase tracking-widest mb-5 nav-link"
+    style="color: #C4954A; letter-spacing: 0.18em;"
+    data-id="Untuk Peneliti & Mahasiswa"
+    data-en="For Researchers & Students">
+    Untuk Peneliti & Mahasiswa
+  </p>
+
+  <!-- Main headline -->
+  <h1 id="hero-title"
+    class="font-display text-5xl md:text-6xl lg:text-7xl leading-tight mb-6"
+    style="color: #1E130F; max-width: 820px;">
+    Riset ilmiah —&nbsp;tanpa bayar API, tanpa kebocoran data.
+  </h1>
+
+  <!-- Subheadline -->
+  <p id="hero-sub"
+    class="font-body text-lg md:text-xl leading-relaxed mb-10 max-w-2xl"
+    style="color: #3D2A22;">
+    <span data-id="Research MCP adalah alat bantu AI gratis yang menghubungkan asisten AI‑mu langsung ke 250 juta+ paper ilmiah, mengelola sitasi otomatis, dan mengekspor dokumen siap terbit — semua tersimpan di komputermu sendiri."
+      data-en="Research MCP is a free AI assistant that connects your AI directly to 250M+ scientific papers, auto-manages citations, and exports publish-ready documents — all stored on your own computer.">
+      Research MCP adalah alat bantu AI gratis yang menghubungkan asisten AI‑mu langsung ke 250 juta+ paper ilmiah, mengelola sitasi otomatis, dan mengekspor dokumen siap terbit — semua tersimpan di komputermu sendiri.
+    </span>
+  </p>
+
+  <!-- CTA -->
+  <a id="hero-cta" href="/mulai"
+    class="font-heading px-8 py-3.5 rounded-sm transition-colors duration-200 text-base"
+    style="background-color: #B85C38; color: #FDF8F0;"
+    onmouseover="this.style.backgroundColor='#C4954A'"
+    onmouseout="this.style.backgroundColor='#B85C38'"
+    data-id="Mulai Pakai →"
+    data-en="Get Started →">
+    Mulai Pakai →
+  </a>
+
+  <!-- Badge row -->
+  <div id="hero-badges" class="mt-10 flex flex-wrap justify-center gap-3 text-xs font-mono">
+    {['250M+ paper', '6 database', '100% gratis', 'local-first', 'anti-halusinasi'].map(b => (
+      <span class="px-3 py-1 rounded-full border"
+        style="border-color: #E8D9BC; color: #3D2A22; background-color: #F5EDD8;">
+        {b}
+      </span>
+    ))}
+  </div>
+
+  <!-- Scroll hint -->
+  <div class="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1"
+    style="color: #C4954A;" aria-hidden="true">
+    <span class="font-body text-xs" style="letter-spacing: 0.1em;">scroll</span>
+    <svg class="w-4 h-4 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+    </svg>
+  </div>
+</section>
+
+<script>
+  import { initHeroAnimation } from '../scripts/animations'
+  document.addEventListener('astro:page-load', initHeroAnimation)
+  initHeroAnimation()
+</script>
