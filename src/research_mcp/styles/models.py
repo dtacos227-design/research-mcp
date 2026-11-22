@@ -1,7 +1,7 @@
 import re
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 MARGIN_KEYS = ("top", "right", "bottom", "left")
 
@@ -15,6 +15,8 @@ def _default_margins() -> dict[str, float]:
 
 
 class SectionSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     id: str
     title: str
     level: int = 1
@@ -36,6 +38,8 @@ class SectionSpec(BaseModel):
 
 
 class FormattingSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     paper_size: Literal["A4", "Letter"] = "A4"
     margin_cm: dict[str, float] = Field(default_factory=_default_margins)
     line_spacing: float = 1.5
@@ -68,6 +72,8 @@ class FormattingSpec(BaseModel):
 
 
 class StyleSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     id: str
     label: str
     description: str = ""

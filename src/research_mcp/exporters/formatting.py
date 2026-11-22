@@ -38,6 +38,17 @@ _PAGE_NUMBER_POSITIONS: dict[str, dict[str, str]] = {
     "header_right": {"position": "top", "align": "right"},
 }
 
+# Page-number placement -> (python-docx header/footer part, alignment name).
+_DOCX_PAGE_NUMBER_POSITIONS: dict[str, tuple[str, str]] = {
+    "footer_center": ("footer", "CENTER"),
+    "footer_right": ("footer", "RIGHT"),
+    "header_right": ("header", "RIGHT"),
+}
+
+# Pandoc's bundled `article_id.tex` composes `$papersize$paper`, so feed it the
+# bare class option (`a4` -> `a4paper`). `ieee.tex` has no papersize variable.
+_LATEX_PAPER_SIZE: dict[str, str] = {"A4": "a4", "Letter": "letter"}
+
 # Heading level -> (font size, space before, space after) in points.
 _HEADING_FORMATS: tuple[tuple[int, float, float, float], ...] = (
     (1, 16, 12, 6),
@@ -128,14 +139,70 @@ def wordcraft_column_steps(fmt: FormattingSpec) -> list[dict]:
     return [_execute("layout.columns", {"count": 2})]
 
 
+def _add_page_number_field(paragraph, alignment: str) -> None:
+    """Write a live ``PAGE`` field into a header/footer paragraph."""
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    paragraph.alignment = getattr(WD_ALIGN_PARAGRAPH, alignment)
+    run = paragraph.add_run()
+    begin = OxmlElement("w:fldChar")
+    begin.set(qn("w:fldCharType"), "begin")
+    instruction = OxmlElement("w:instrText")
+    instruction.set(qn("xml:space"), "preserve")
+    instruction.text = " PAGE "
+    separate = OxmlElement("w:fldChar")
+    separate.set(qn("w:fldCharType"), "separate")
+    placeholder = OxmlElement("w:t")
+    placeholder.text = "1"
+    end = OxmlElement("w:fldChar")
+    end.set(qn("w:fldCharType"), "end")
+    for element in (begin, instruction, separate, placeholder, end):
+        run._r.append(element)
+
+
+def _set_page_number_format(section, page_format: str) -> None:
+    """Set the section's ``w:pgNumType`` numeral format (decimal/lowerRoman/...).
+
+    python-docx has no API for this attribute, so the ``sectPr`` element is
+    edited directly; Word and LibreOffice both honor ``w:fmt``.
+    """
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    sect_pr = section._sectPr
+    pg_num_type = sect_pr.find(qn("w:pgNumType"))
+    if pg_num_type is None:
+        pg_num_type = OxmlElement("w:pgNumType")
+        sect_pr.append(pg_num_type)
+    pg_num_type.set(qn("w:fmt"), page_format)
+
+
+def _set_columns(section, count: int) -> None:
+    """Set the section's column count; python-docx exposes no column API."""
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    sect_pr = section._sectPr
+    columns = sect_pr.find(qn("w:cols"))
+    if columns is None:
+        columns = OxmlElement("w:cols")
+        sect_pr.append(columns)
+    columns.set(qn("w:num"), str(count))
+    columns.set(qn("w:space"), "720")
+
+
 def apply_docx_formatting(path: Path, fmt: FormattingSpec) -> None:
-    """Apply paper size, margins, Normal font/spacing to an exported `.docx` in place.
+    """Apply paper size, margins, typography, numbering and columns to a `.docx`.
 
     Pandoc's ``--reference-doc`` does not carry page margins reliably, so the
     exporter re-applies them here. Justification goes on the ``Normal`` style so
     body paragraphs inherit it; the heading styles (``basedOn`` Normal and
     without their own ``jc``) are explicitly pinned left so wrapped chapter
-    headings never inherit justified spacing.
+    headings never inherit justified spacing. Page numbers are inserted as a
+    live ``PAGE`` field in the requested header/footer slot with the section's
+    ``w:pgNumType`` numeral format, and ``two_column`` sets ``w:cols/@w:num``.
     """
     from docx import Document
     from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -143,6 +210,7 @@ def apply_docx_formatting(path: Path, fmt: FormattingSpec) -> None:
 
     document = Document(str(path))
     width_cm, height_cm = _PAGE_SIZE_CM[fmt.paper_size]
+    placement = _DOCX_PAGE_NUMBER_POSITIONS.get(fmt.page_number_position)
     for section in document.sections:
         section.page_width = Cm(width_cm)
         section.page_height = Cm(height_cm)
@@ -150,6 +218,14 @@ def apply_docx_formatting(path: Path, fmt: FormattingSpec) -> None:
         section.right_margin = Cm(fmt.margin_cm["right"])
         section.bottom_margin = Cm(fmt.margin_cm["bottom"])
         section.left_margin = Cm(fmt.margin_cm["left"])
+        if placement is not None:
+            part, alignment = placement
+            container = section.header if part == "header" else section.footer
+            container.is_linked_to_previous = False
+            _add_page_number_field(container.paragraphs[0], alignment)
+            _set_page_number_format(section, fmt.page_number_format)
+        if fmt.two_column:
+            _set_columns(section, 2)
 
     normal = document.styles["Normal"]
     normal.font.name = fmt.font_family
@@ -185,6 +261,7 @@ def latex_metadata(fmt: FormattingSpec) -> dict[str, str]:
         f"{side}={_format_cm(margins[side])}cm" for side in ("top", "right", "bottom", "left")
     )
     return {
+        "papersize": _LATEX_PAPER_SIZE[fmt.paper_size],
         "geometry": geometry,
         "linestretch": str(fmt.line_spacing),
         "fontsize": f"{int(fmt.font_size_pt)}pt",

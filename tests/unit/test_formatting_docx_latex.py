@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
 
 from research_mcp.exporters import docx_polisher, formatting
 from research_mcp.styles.models import FormattingSpec, SectionSpec
@@ -100,6 +101,60 @@ def test_apply_docx_saves_in_place(tmp_path):
     assert round(Document(str(path)).sections[0].page_width.cm, 1) == 21.0
 
 
+@pytest.mark.parametrize(
+    ("position", "part", "alignment"),
+    [
+        ("footer_center", "footer", WD_ALIGN_PARAGRAPH.CENTER),
+        ("footer_right", "footer", WD_ALIGN_PARAGRAPH.RIGHT),
+        ("header_right", "header", WD_ALIGN_PARAGRAPH.RIGHT),
+    ],
+)
+def test_apply_docx_adds_a_page_field_in_the_requested_slot(tmp_path, position, part, alignment):
+    path = _blank_docx(tmp_path)
+
+    formatting.apply_docx_formatting(path, FormattingSpec(page_number_position=position))
+
+    section = Document(str(path)).sections[0]
+    container = getattr(section, part)
+    paragraph = container.paragraphs[0]
+    assert paragraph.alignment == alignment
+    assert "PAGE" in paragraph._p.xml
+
+
+@pytest.mark.parametrize("numeral", ["decimal", "lowerRoman", "upperRoman"])
+def test_apply_docx_sets_the_page_number_numeral_format(tmp_path, numeral):
+    path = _blank_docx(tmp_path)
+
+    formatting.apply_docx_formatting(path, FormattingSpec(page_number_format=numeral))
+
+    section = Document(str(path)).sections[0]
+    pg_num_type = section._sectPr.find(qn("w:pgNumType"))
+    assert pg_num_type is not None
+    assert pg_num_type.get(qn("w:fmt")) == numeral
+
+
+def test_apply_docx_leaves_page_numbers_off_when_position_is_none(tmp_path):
+    path = _blank_docx(tmp_path)
+
+    formatting.apply_docx_formatting(path, FormattingSpec(page_number_position="none"))
+
+    section = Document(str(path)).sections[0]
+    assert "PAGE" not in section.header.paragraphs[0]._p.xml
+    assert "PAGE" not in section.footer.paragraphs[0]._p.xml
+    assert section._sectPr.find(qn("w:pgNumType")) is None
+
+
+def test_apply_docx_sets_two_columns(tmp_path):
+    path = _blank_docx(tmp_path)
+
+    formatting.apply_docx_formatting(path, FormattingSpec(two_column=True))
+
+    section = Document(str(path)).sections[0]
+    columns = section._sectPr.find(qn("w:cols"))
+    assert columns is not None
+    assert columns.get(qn("w:num")) == "2"
+
+
 def test_docx_polisher_exposes_apply_formatting(tmp_path):
     path = _blank_docx(tmp_path)
     docx_polisher.apply_formatting(
@@ -137,6 +192,12 @@ def test_latex_metadata_geometry_orders_margins_and_trims_floats():
 
     assert meta["geometry"] == "top=2.5cm,right=2.5cm,bottom=3cm,left=4cm"
     assert meta["fontsize"] == "11pt"
+
+
+@pytest.mark.parametrize(("paper_size", "expected"), [("A4", "a4"), ("Letter", "letter")])
+def test_latex_metadata_forwards_papersize(paper_size, expected):
+    meta = formatting.latex_metadata(FormattingSpec(paper_size=paper_size))
+    assert meta["papersize"] == expected
 
 
 # --- Heading normalization (R3) ------------------------------------------

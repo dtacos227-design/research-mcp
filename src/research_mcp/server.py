@@ -876,19 +876,25 @@ def _warnings_for_extra_drafts(extra_files: list[str]) -> list[str]:
     return [f"Exported draft(s) not in the style outline: {', '.join(extra_files)}"]
 
 
-def _warnings_for_heading_numbering(style: StyleSpec) -> list[str]:
-    """Report that heading numbers come from the draft, not from WordCraft.
+_UNSUPPORTED_HEADING_NUMBERING = frozenset({"roman_bab", "numeric_bab"})
 
-    Modes without a blueprint (seed DOCX and job script) get this caveat here;
-    `live_authoring` already receives the equivalent note from `build_blueprint`
-    via `_style_warnings`, so callers must not add a second copy.
+
+def _warnings_for_heading_numbering(style: StyleSpec) -> list[str]:
+    """Report that heading numbers come from the draft text, not from the engine.
+
+    Only ``roman_bab``/``numeric_bab`` ask for automatic numbering; ``none`` and
+    ``arabic`` styles keep whatever heading text the draft already holds, so they
+    must not raise a false alarm. Modes without a blueprint (seed DOCX and job
+    script) get this caveat here; `live_authoring` already receives the
+    equivalent note from `build_blueprint` via `_style_warnings`, so callers must
+    not add a second copy.
     """
-    if style.formatting.heading_numbering == "none":
+    if style.formatting.heading_numbering not in _UNSUPPORTED_HEADING_NUMBERING:
         return []
     return [
-        "Heading numbering (BAB I / 1.1) is taken from the draft text; WordCraft does "
-        "not renumber headings. Ensure each chapter's heading is written as the style "
-        "requires."
+        "Heading numbering (BAB I / 1.1) is taken from the draft text; the export "
+        "engine does not renumber headings. Ensure each chapter's heading is written "
+        "as the style requires."
     ]
 
 
@@ -899,8 +905,20 @@ def _warnings_for_two_column(style: StyleSpec, latex_name: str) -> list[str]:
     return [
         f"Style {style.id!r} requests a two-column layout, but the bundled LaTeX "
         f"template {latex_name!r} is single-column; the PDF is rendered in one column. "
-        "Export to DOCX or open it in WordCraft for two columns."
+        "Re-export with export_to_docx (DOCX columns are applied via python-docx) or "
+        "open the document in WordCraft for a two-column layout."
     ]
+
+
+def _warnings_for_latex(style: StyleSpec, latex_name: str) -> list[str]:
+    """Every honest degradation note for the LaTeX fallback."""
+    warnings = _warnings_for_two_column(style, latex_name)
+    if style.formatting.page_number_position == "none":
+        warnings.append(
+            f"Style {style.id!r} requests no page numbers, but the bundled LaTeX "
+            f"template {latex_name!r} still numbers pages; the PDF will show page numbers."
+        )
+    return warnings
 
 
 @mcp.tool()
@@ -1064,6 +1082,7 @@ async def export_to_docx(
                 "warnings": [
                     *_warnings_for_missing(missing),
                     *_warnings_for_extra_drafts(extra_files),
+                    *_warnings_for_heading_numbering(resolved_style),
                 ],
             }
         finally:
@@ -1150,7 +1169,7 @@ async def export_to_latex(
                 "warnings": [
                     *_warnings_for_missing(missing),
                     *_warnings_for_extra_drafts(extra_files),
-                    *_warnings_for_two_column(resolved_style, latex_name),
+                    *_warnings_for_latex(resolved_style, latex_name),
                 ],
             }
         finally:

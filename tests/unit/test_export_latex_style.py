@@ -8,6 +8,7 @@ from research_mcp.db import repository
 from research_mcp.db.database import get_connection
 from research_mcp.db.repository import save_paper_and_sections
 from research_mcp.models import PaperModel, ResearchBrief
+from research_mcp.styles.models import FormattingSpec, StyleSpec
 from research_mcp.styles.registry import get_style
 
 
@@ -86,7 +87,10 @@ async def test_latex_export_warns_on_two_column(tmp_path, monkeypatch):
 
     assert result["style_id"] == "ieee_paper"
     assert result["format"] == "latex"
-    assert any("two" in w.lower() or "column" in w.lower() for w in result.get("warnings", []))
+    column_warnings = [warning for warning in result["warnings"] if "column" in warning.lower()]
+    assert column_warnings
+    # The advice must be truthful: DOCX now really applies columns.
+    assert "export_to_docx" in column_warnings[0]
 
 
 @pytest.mark.asyncio
@@ -111,5 +115,19 @@ async def test_latex_export_uses_style_template_csl_and_formatting(tmp_path, mon
     metadata = recorded[0]["metadata"]
     assert metadata["geometry"].startswith("top=1.9cm")
     assert metadata["fontsize"] == "10pt"
+    assert metadata["papersize"] == "letter"
     assert "# Introduction" in recorded[0]["markdown"]
     assert "Exported draft(s) not in the style outline: 99_notes.md" in result["warnings"]
+
+
+def test_latex_warns_when_the_style_asks_for_no_page_numbers():
+    style = StyleSpec(
+        id="no-pages",
+        label="No pages",
+        outline=[],
+        formatting=FormattingSpec(page_number_position="none"),
+    )
+
+    warnings = server._warnings_for_latex(style, "article_id")
+
+    assert any("page numbers" in warning for warning in warnings)

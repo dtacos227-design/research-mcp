@@ -78,7 +78,10 @@ async def test_skripsi_style_export_end_to_end(tmp_path, monkeypatch):
 
     assert result["style_id"] == "skripsi_s1"
     assert result["cited_but_missing"] == []
-    assert result["warnings"] == []
+    # The DOCX engine cannot renumber BAB headings automatically; that caveat is
+    # the only warning this otherwise clean export should carry.
+    assert len(result["warnings"]) == 1
+    assert "numbering" in result["warnings"][0].lower()
 
     docx_path = workspace_root / project["slug"] / "exports" / "skripsi.docx"
     assert result["output_path"] == str(docx_path)

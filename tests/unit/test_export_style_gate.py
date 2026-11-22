@@ -124,7 +124,8 @@ async def test_export_reports_style_id(tmp_path, monkeypatch):
     assert result["csl_style"] == "apa"
     assert result["format"] == "docx"
     assert result["cited_but_missing"] == []
-    assert result["warnings"] == []
+    assert len(result["warnings"]) == 1
+    assert "numbering" in result["warnings"][0].lower()
     assert "# BAB I Pendahuluan" in rendered[0]["markdown"]
     assert formatted == [(rendered[0]["output"], get_style("skripsi_s1").formatting)]
     assert len(polished) == 1
@@ -146,4 +147,18 @@ async def test_outline_chapters_come_first_and_extras_are_warned(tmp_path, monke
     assert merged.index("# BAB I Pendahuluan") < merged.index("# Catatan")
     assert "Isi bab satu." in merged
     assert "Bahan tambahan." in merged
-    assert result["warnings"] == ["Exported draft(s) not in the style outline: 01_catatan.md"]
+    assert result["warnings"][0] == "Exported draft(s) not in the style outline: 01_catatan.md"
+
+
+@pytest.mark.asyncio
+async def test_unnumbered_style_gets_no_numbering_warning(tmp_path, monkeypatch):
+    """`article_imrad` keeps draft headings verbatim, so it must not warn."""
+    project, _workspace_root = await _bootstrap(tmp_path, monkeypatch, style_id="article_imrad")
+    await server.save_draft_section(
+        project.id, "01_introduction.md", "# Introduction\n\nBody [@doe2024gate]."
+    )
+    _rendered, _formatted, _polished = _patch_export_side_effects(monkeypatch)
+
+    result = await server.export_to_docx(project.id, "paper")
+
+    assert not any("numbering" in warning.lower() for warning in result["warnings"])

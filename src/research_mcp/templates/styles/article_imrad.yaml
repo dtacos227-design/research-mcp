@@ -19,7 +19,7 @@ formatting:
   justify: true
   font_family: Times New Roman
   font_size_pt: 12
-  heading_numbering: arabic
+  heading_numbering: none
   page_number_position: footer_center
   page_number_format: decimal
   two_column: false

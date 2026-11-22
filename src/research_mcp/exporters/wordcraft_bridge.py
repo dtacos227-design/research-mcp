@@ -436,7 +436,7 @@ def _style_warnings(style: StyleSpec) -> list[str]:
     `normalize_chapter_markdown`), never from WordCraft itself.
     """
     fmt = style.formatting
-    if fmt.heading_numbering == "none":
+    if fmt.heading_numbering not in {"roman_bab", "numeric_bab"}:
         return []
     return [
         f"WordCraft does not apply heading numbering ({fmt.heading_numbering}): it keeps "

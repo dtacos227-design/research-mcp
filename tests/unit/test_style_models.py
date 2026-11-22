@@ -67,3 +67,23 @@ def test_margin_rejects_missing_key():
 
     with pytest.raises(ValidationError):
         FormattingSpec(margin_cm={"top": 2.5, "right": 2.5, "bottom": 2.5})
+
+
+def test_section_rejects_unknown_keys():
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        SectionSpec(id="a", title="A", filename="01_a.md", order=1, typo_key=True)
+
+
+def test_formatting_rejects_unknown_keys():
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        FormattingSpec(two_columns=True)
+
+
+def test_style_rejects_unknown_keys():
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        StyleSpec(
+            id="x",
+            label="X",
+            outline=[SectionSpec(id="a", title="A", filename="01_a.md", order=1)],
+            formating={},
+        )
