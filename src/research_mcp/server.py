@@ -27,6 +27,7 @@ from research_mcp.exporters.templates import (
     resolve_docx_template,
     resolve_latex_template,
 )
+from research_mcp.models import BriefLanguage, ResearchBrief
 from research_mcp.parsers.ingestion import (
     _safe_destination,
     ingest_local_pdf,
@@ -36,6 +37,8 @@ from research_mcp.providers.aggregator import search_all
 from research_mcp.providers.crossref import get_bibtex, get_by_doi
 from research_mcp.providers.semantic_scholar import get_citations, get_references
 from research_mcp.providers.unpaywall import get_oa_location
+from research_mcp.styles.models import StyleSpec
+from research_mcp.styles.registry import get_style, list_styles
 from research_mcp.writers import draft_manager
 from research_mcp.writers.chart_runner import run_chart
 
@@ -129,6 +132,159 @@ async def get_project_status(project_id: str) -> dict:
         }
     finally:
         await conn.close()
+
+
+DEFAULT_RESEARCH_STYLE = "article_imrad"
+
+_ASK_USER_TEMPLATES: dict[str, str] = {
+    "style_id": (
+        "Gaya riset apa? Pilih salah satu id gaya yang tersedia. "
+        "/ Which research style should we use? Pick one of the available ids."
+    ),
+    "title": "Judul riset? / What is the research title?",
+    "research_question": (
+        "Pertanyaan atau tujuan riset? / What is the research question or objective?"
+    ),
+    "citation": (
+        "Gaya sitasi? (default dari gaya: {citation}) / Citation style? (style default: {citation})"
+    ),
+}
+
+
+def _clean_optional(value: str | None) -> str | None:
+    """Strip an answer; None and whitespace-only both mean "not answered"."""
+    if value is None:
+        return None
+    return value.strip() or None
+
+
+def _ask_user_prompts(missing: list[str], style: StyleSpec) -> list[str]:
+    """One bilingual question per missing brief field, in the missing order."""
+    options = ", ".join(item["id"] for item in list_styles())
+    prompts: list[str] = []
+    for field in missing:
+        template = _ASK_USER_TEMPLATES.get(field, f"{field}? / {field}?")
+        prompt = template.format(citation=style.citation)
+        if field == "style_id":
+            prompt = f"{prompt} Options: {options}"
+        prompts.append(prompt)
+    return prompts
+
+
+@mcp.tool()
+async def save_research_brief(
+    project_id: str,
+    style_id: str,
+    title: str,
+    research_question: str,
+    citation: str | None = None,
+    language: BriefLanguage = "id",
+    scope: str = "",
+    target_length: str = "",
+    deadline: str = "",
+) -> dict:
+    """Save the intake answers for a project and report what is still missing.
+
+    Nothing is auto-filled: `citation` is required, and omitting it leaves the
+    brief incomplete so `start_research` can ask the user to confirm the
+    style's default. Blank or whitespace-only answers count as unanswered.
+    """
+    try:
+        resolved_style_id = (style_id or "").strip()
+        # Validate before persisting so an unknown style raises the registry's ToolError.
+        get_style(resolved_style_id)
+        brief = ResearchBrief(
+            style_id=resolved_style_id,
+            title=_clean_optional(title),
+            research_question=_clean_optional(research_question),
+            citation=_clean_optional(citation),
+            language=language,
+            scope=_clean_optional(scope) or "",
+            target_length=_clean_optional(target_length) or "",
+            deadline=_clean_optional(deadline) or "",
+        )
+        conn = await get_connection(get_settings().db_path)
+        try:
+            await _get_project_or_raise(conn, project_id)
+            await repository.set_project_brief(
+                conn, project_id, brief.model_dump_json(), resolved_style_id
+            )
+        finally:
+            await conn.close()
+        missing = brief.missing()
+        return {
+            "status": "complete" if not missing else "needs_input",
+            "complete": not missing,
+            "missing": missing,
+            "brief": brief.model_dump(),
+        }
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(
+            f"Could not save the research brief for project {project_id!r}: "
+            f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+
+@mcp.tool()
+async def get_research_brief(project_id: str) -> dict:
+    """Return the saved research brief and which required answers are missing."""
+    try:
+        conn = await get_connection(get_settings().db_path)
+        try:
+            await _get_project_or_raise(conn, project_id)
+            stored = await repository.get_project_brief(conn, project_id)
+        finally:
+            await conn.close()
+        brief = ResearchBrief.model_validate(stored or {})
+        return {
+            "complete": brief.complete(),
+            "missing": brief.missing(),
+            "brief": brief.model_dump(),
+        }
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(
+            f"Could not read the research brief for project {project_id!r}: "
+            f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+
+@mcp.tool()
+async def start_research(project_id: str) -> dict:
+    """Check the intake gate and start the research once the brief is complete.
+
+    An incomplete brief returns `needs_input` with one bilingual question per
+    missing field and creates no files; answer them with `save_research_brief`
+    and call this again.
+    """
+    try:
+        conn = await get_connection(get_settings().db_path)
+        try:
+            await _get_project_or_raise(conn, project_id)
+            stored = await repository.get_project_brief(conn, project_id)
+            brief = ResearchBrief.model_validate(stored or {})
+            missing = brief.missing()
+            if missing:
+                style = await _resolve_style_for_export(conn, project_id, brief.style_id)
+                return {
+                    "status": "needs_input",
+                    "missing": missing,
+                    "ask_user": _ask_user_prompts(missing, style),
+                    "defaults": {"citation": style.citation, "language": brief.language},
+                }
+        finally:
+            await conn.close()
+        # Task 7 replaces this placeholder with the style's draft skeleton.
+        return {"status": "created", "created_files": []}
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(
+            f"Could not start research for project {project_id!r}: {type(exc).__name__}: {exc}"
+        ) from exc
 
 
 @mcp.tool()
@@ -475,6 +631,13 @@ async def _get_project_or_raise(conn, project_id: str):
         return await repository.get_project(conn, project_id)
     except repository.ProjectNotFoundError as exc:
         raise ToolError(str(exc)) from exc
+
+
+async def _resolve_style_for_export(conn, project_id: str, style: str | None) -> StyleSpec:
+    """Resolve a style: explicit parameter, else the project's style, else the default."""
+    project = await _get_project_or_raise(conn, project_id)
+    requested = (style or "").strip() or project.style_id or DEFAULT_RESEARCH_STYLE
+    return get_style(requested)
 
 
 async def _render_docx_export(
