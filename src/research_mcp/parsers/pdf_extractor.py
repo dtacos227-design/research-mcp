@@ -1,5 +1,8 @@
+import contextlib
 import os
 import re
+import sys
+import threading
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 from uuid import uuid4
@@ -19,6 +22,36 @@ class PdfMetadata(BaseModel):
     title: str | None = None
     author: str | None = None
     year: int | None = None
+
+
+_MESSAGE_LOCK = threading.Lock()
+
+
+@contextlib.contextmanager
+def _parser_messages_to_stderr():
+    """Route library chatter away from stdout, which carries MCP JSON-RPC frames.
+
+    PyMuPDF's ``message()`` writes to file descriptor 1 directly, so redirecting
+    ``sys.stdout`` is not enough. fd 1 is temporarily pointed at fd 2 for the
+    duration of the call; a lock keeps concurrent parses from interleaving.
+    """
+    with _MESSAGE_LOCK:
+        try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            saved = os.dup(1)
+        except OSError:  # pragma: no cover - platforms without fd 2 semantics
+            with contextlib.redirect_stdout(sys.stderr):
+                yield
+            return
+        try:
+            os.dup2(2, 1)
+            with contextlib.redirect_stdout(sys.stderr):
+                yield
+        finally:
+            sys.stderr.flush()
+            os.dup2(saved, 1)
+            os.close(saved)
 
 
 def _project_path(path: Path, project_dir: Path) -> Path:
@@ -137,18 +170,19 @@ def _markdown_text(result: str | list[dict]) -> str:
 def extract_markdown(pdf_path: Path, project_dir: Path) -> str:
     resolved_path = _project_path(pdf_path, project_dir)
     _validate_pdf_file(resolved_path)
-    result = pymupdf4llm.to_markdown(
-        str(resolved_path),
-        page_chunks=True,
-        show_progress=False,
-    )
+    with _parser_messages_to_stderr():
+        result = pymupdf4llm.to_markdown(
+            str(resolved_path),
+            page_chunks=True,
+            show_progress=False,
+        )
     return _markdown_text(result)
 
 
 def extract_pdf_metadata(pdf_path: Path, project_dir: Path) -> PdfMetadata:
     resolved_path = _project_path(pdf_path, project_dir)
     _validate_pdf_file(resolved_path)
-    with pymupdf.open(resolved_path) as document:
+    with _parser_messages_to_stderr(), pymupdf.open(resolved_path) as document:
         raw = document.metadata or {}
 
     creation_date = raw.get("creationDate") or ""
