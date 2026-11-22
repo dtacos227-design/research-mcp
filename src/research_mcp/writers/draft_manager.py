@@ -10,12 +10,13 @@ from research_mcp.db.repository import (
     list_draft_sections,
     upsert_draft_section,
 )
+from research_mcp.styles.models import SAFE_DRAFT_FILENAME_RE as _SAFE_FILENAME_RE
 
 _HEADING_RE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
 
 # A draft filename is a single path component ending in `.md` — no separators,
-# no `..`, no absolute paths, no other extensions.
-_SAFE_FILENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*\.md$")
+# no `..`, no absolute paths, no other extensions. The pattern lives in
+# `styles.models` so the style outline and these tools accept the same names.
 
 
 def _validate_filename(filename: str) -> None:

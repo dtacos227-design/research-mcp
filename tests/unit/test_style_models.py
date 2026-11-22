@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from research_mcp.styles.models import FormattingSpec, SectionSpec, StyleSpec
 
 
@@ -22,6 +25,32 @@ def test_style_requires_outline_sections():
 def test_section_kind_front_matter():
     s = SectionSpec(id="cover", title="Cover", filename="00_cover.md", order=0, kind="front_matter")
     assert s.kind == "front_matter"
+
+
+def test_section_accepts_valid_flat_md_filename():
+    s = SectionSpec(id="a", title="A", filename="01_introduction.md", order=1)
+    assert s.filename == "01_introduction.md"
+
+
+@pytest.mark.parametrize(
+    "filename",
+    ["sub/chapter.md", "../escape.md", "/tmp/abs.md", "notes.txt", "chapter", "..md"],
+)
+def test_section_rejects_unsafe_filename(filename):
+    with pytest.raises(ValidationError, match="flat `.md` file name"):
+        SectionSpec(id="a", title="A", filename=filename, order=1)
+
+
+def test_style_rejects_duplicate_outline_filenames():
+    with pytest.raises(ValidationError, match="duplicate filename.*'01_a.md'"):
+        StyleSpec(
+            id="x",
+            label="X",
+            outline=[
+                SectionSpec(id="a", title="A", filename="01_a.md", order=1),
+                SectionSpec(id="b", title="B", filename="01_a.md", order=2),
+            ],
+        )
 
 
 def test_margin_rejects_negative():

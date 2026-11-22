@@ -1,8 +1,13 @@
+import re
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 MARGIN_KEYS = ("top", "right", "bottom", "left")
+
+# Single source of truth for draft chapter file names shared with
+# `research_mcp.writers.draft_manager`: flat, `.md` only, no directories.
+SAFE_DRAFT_FILENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*\.md$")
 
 
 def _default_margins() -> dict[str, float]:
@@ -17,6 +22,17 @@ class SectionSpec(BaseModel):
     order: int
     kind: Literal["front_matter", "body"] = "body"
     guidance: str = ""
+
+    @field_validator("filename")
+    @classmethod
+    def _validate_filename(cls, value: str) -> str:
+        """Keep outline names addressable by draft_manager's read/write tools."""
+        if not SAFE_DRAFT_FILENAME_RE.match(value) or ".." in value:
+            raise ValueError(
+                f"filename {value!r} must be a flat `.md` file name such as "
+                "'01_introduction.md' (no directories or '..', letters/digits/._- only)."
+            )
+        return value
 
 
 class FormattingSpec(BaseModel):
@@ -60,3 +76,17 @@ class StyleSpec(BaseModel):
     citation: str = "apa"
     export: dict[str, str] = Field(default_factory=dict)
     guidance: str = ""
+
+    @model_validator(mode="after")
+    def _validate_unique_outline_filenames(self) -> "StyleSpec":
+        """One draft file per section: a duplicate would silently drop a chapter."""
+        seen: set[str] = set()
+        duplicates: list[str] = []
+        for section in self.outline:
+            if section.filename in seen and section.filename not in duplicates:
+                duplicates.append(section.filename)
+            seen.add(section.filename)
+        if duplicates:
+            names = ", ".join(repr(name) for name in duplicates)
+            raise ValueError(f"outline filenames must be unique; duplicate filename(s): {names}")
+        return self

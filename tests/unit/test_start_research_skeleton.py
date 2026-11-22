@@ -2,6 +2,7 @@
 
 import pytest
 import pytest_asyncio
+from mcp.server.mcpserver.exceptions import ToolError
 
 from research_mcp import server
 from research_mcp.config import get_settings
@@ -147,3 +148,26 @@ async def test_skeleton_treats_empty_files_as_missing(project_id):
     assert result["status"] == "created"
     assert "00_cover.md" in result["created_files"]
     assert (drafts / "00_cover.md").read_text(encoding="utf-8").startswith("# Sampul")
+
+
+@pytest.mark.asyncio
+async def test_skeleton_rejects_duplicate_outline_filenames(project_id, monkeypatch):
+    await _complete_brief(project_id)
+    style = get_style("skripsi_s1")
+    # model_copy skips validation, standing in for an unvalidated style object.
+    duplicated = style.model_copy(
+        update={
+            "outline": [
+                *style.outline,
+                style.outline[0].model_copy(update={"id": "cover_again"}),
+            ]
+        }
+    )
+    monkeypatch.setattr(server, "get_style", lambda _style_id: duplicated)
+
+    with pytest.raises(ToolError, match="duplicate outline filename.*00_cover.md"):
+        await server.start_research(project_id)
+
+    drafts = await _project_dir(project_id) / "drafts"
+    assert not drafts.exists() or not list(drafts.glob("*.md"))
+    assert await _draft_rows(project_id) == []

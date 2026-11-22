@@ -118,6 +118,55 @@ def test_env_dir_must_be_a_directory(tmp_path, monkeypatch):
         registry.reload_styles()
 
 
+def test_invalid_outline_filename_names_the_file_and_value(tmp_path, monkeypatch):
+    d = _write_style(
+        tmp_path,
+        "badname.yaml",
+        """
+        id: badname
+        label: Bad Name
+        outline:
+          - {id: a, title: A, filename: sub/chapter.md, order: 1}
+    """,
+    )
+    monkeypatch.setenv(registry.USER_STYLES_DIR_ENV, str(d))
+    with pytest.raises(ToolError, match="badname.yaml.*flat `.md` file name"):
+        registry.reload_styles()
+
+
+def test_non_markdown_outline_filename_rejected(tmp_path, monkeypatch):
+    d = _write_style(
+        tmp_path,
+        "notmd.yaml",
+        """
+        id: notmd
+        label: Not Markdown
+        outline:
+          - {id: a, title: A, filename: notes.txt, order: 1}
+    """,
+    )
+    monkeypatch.setenv(registry.USER_STYLES_DIR_ENV, str(d))
+    with pytest.raises(ToolError, match="notes.txt"):
+        registry.reload_styles()
+
+
+def test_duplicate_outline_filename_names_the_duplicate(tmp_path, monkeypatch):
+    d = _write_style(
+        tmp_path,
+        "dupe.yaml",
+        """
+        id: dupe
+        label: Duplicate
+        outline:
+          - {id: a, title: A, filename: same.md, order: 1}
+          - {id: b, title: B, filename: same.md, order: 2}
+    """,
+    )
+    monkeypatch.setenv(registry.USER_STYLES_DIR_ENV, str(d))
+    with pytest.raises(ToolError, match="duplicate filename.*same.md"):
+        registry.reload_styles()
+
+
 def test_unreadable_styles_dir_raises_tool_error(tmp_path, monkeypatch):
     d = tmp_path / "unreadable"
     d.mkdir()

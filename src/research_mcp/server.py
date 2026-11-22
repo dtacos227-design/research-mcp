@@ -665,6 +665,13 @@ async def _create_style_skeleton(
     the user can decide.
     """
     sections = sorted(style.outline, key=lambda section: section.order)
+    names = [section.filename for section in sections]
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    if duplicates:
+        raise ToolError(
+            f"Style {style.id!r} declares duplicate outline filename(s): "
+            f"{', '.join(duplicates)}; one chapter file cannot hold two sections."
+        )
     targets = [
         (section, _safe_destination(project_dir / "drafts" / section.filename, project_dir))
         for section in sections
