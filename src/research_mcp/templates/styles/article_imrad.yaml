@@ -4,6 +4,25 @@ description: >-
   Artikel jurnal standar dengan struktur IMRaD; A4, margin 2.5 cm, spasi 1.5, sitasi APA.
   EN: Standard journal article using the IMRaD structure; A4, 2.5 cm margins, 1.5 spacing, APA.
 citation: apa
+export:
+  docx_template: default_academic
+  latex_template: article_id
+guidance: >-
+  Gunakan gaya ini untuk artikel jurnal empiris: mulai dari abstrak, lalu Introduction,
+  Methods, Results, Discussion, dan Conclusion sebelum daftar referensi.
+  EN: Use this style for empirical journal articles: abstract first, then Introduction,
+  Methods, Results, Discussion, and Conclusion before the reference list.
+formatting:
+  paper_size: A4
+  margin_cm: {top: 2.5, right: 2.5, bottom: 2.5, left: 2.5}
+  line_spacing: 1.5
+  justify: true
+  font_family: Times New Roman
+  font_size_pt: 12
+  heading_numbering: arabic
+  page_number_position: footer_center
+  page_number_format: decimal
+  two_column: false
 outline:
   - id: abstract
     title: Abstract
@@ -20,3 +39,38 @@ outline:
     guidance: >-
       Latar belakang, kesenjangan riset, dan rumusan pertanyaan penelitian.
       EN: Background, research gap, and the research question.
+  - id: methods
+    title: Methods
+    filename: 02_methods.md
+    order: 3
+    guidance: >-
+      Desain penelitian, data, instrumen, prosedur, dan teknik analisis yang dapat direplikasi.
+      EN: Study design, data, instruments, procedures, and analysis steps sufficient to replicate.
+  - id: results
+    title: Results
+    filename: 03_results.md
+    order: 4
+    guidance: >-
+      Temuan empiris tanpa interpretasi; rujuk setiap tabel dan gambar secara eksplisit.
+      EN: Empirical findings without interpretation; reference every table and figure explicitly.
+  - id: discussion
+    title: Discussion
+    filename: 04_discussion.md
+    order: 5
+    guidance: >-
+      Tafsirkan temuan terhadap literatur, jelaskan mekanisme, dan akui keterbatasan.
+      EN: Interpret findings against the literature, explain mechanisms, and state limitations.
+  - id: conclusion
+    title: Conclusion
+    filename: 05_conclusion.md
+    order: 6
+    guidance: >-
+      Jawab pertanyaan penelitian secara ringkas dan sebutkan kontribusi serta agenda lanjutan.
+      EN: Answer the research question briefly, then state contributions and future work.
+  - id: references
+    title: References
+    filename: 06_references.md
+    order: 7
+    guidance: >-
+      Daftar referensi final dari bibliography proyek; jangan menulis entri secara manual.
+      EN: Final reference list generated from the project bibliography; never type entries by hand.

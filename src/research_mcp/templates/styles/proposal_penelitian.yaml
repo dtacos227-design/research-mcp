@@ -1,0 +1,84 @@
+id: proposal_penelitian
+label: Proposal Penelitian
+description: >-
+  Proposal penelitian delapan bagian dari latar belakang hingga anggaran; A4, margin 2.5 cm,
+  spasi 1.5, sitasi APA.
+  EN: Eight-part research proposal from background to budget; A4, 2.5 cm margins, 1.5 spacing,
+  APA citations.
+citation: apa
+export:
+  docx_template: default_academic
+  latex_template: article_id
+guidance: >-
+  Gunakan gaya ini untuk proposal atau usulan penelitian: bangun alasan dari latar belakang
+  sampai anggaran, dan pastikan setiap klaim didukung sitasi terverifikasi.
+  EN: Use this style for a research proposal or grant application: build the argument from
+  background through budget, and support every claim with verified citations.
+formatting:
+  paper_size: A4
+  margin_cm: {top: 2.5, right: 2.5, bottom: 2.5, left: 2.5}
+  line_spacing: 1.5
+  justify: true
+  font_family: Times New Roman
+  font_size_pt: 12
+  heading_numbering: arabic
+  page_number_position: footer_center
+  page_number_format: decimal
+  two_column: false
+outline:
+  - id: latar_belakang
+    title: Latar Belakang
+    filename: 01_latar_belakang.md
+    order: 1
+    guidance: >-
+      Jelaskan fenomena, data pendukung, dan kesenjangan riset yang menuntut penelitian ini.
+      EN: Explain the phenomenon, supporting data, and the research gap that motivates the study.
+  - id: rumusan_masalah
+    title: Rumusan Masalah
+    filename: 02_rumusan_masalah.md
+    order: 2
+    guidance: >-
+      Nyatakan pertanyaan penelitian secara operasional dan dapat dijawab dengan data.
+      EN: State the research questions operationally so the available data can answer them.
+  - id: tujuan
+    title: Tujuan Penelitian
+    filename: 03_tujuan.md
+    order: 3
+    guidance: >-
+      Turunkan tujuan umum menjadi tujuan khusus yang selaras satu-satu dengan rumusan masalah.
+      EN: Break the general objective into specific objectives mapped one-to-one to the questions.
+  - id: manfaat
+    title: Manfaat Penelitian
+    filename: 04_manfaat.md
+    order: 4
+    guidance: >-
+      Sebutkan manfaat teoretis dan praktis bagi ilmu, institusi, dan pemangku kepentingan.
+      EN: State the theoretical and practical benefits for science, institutions, and stakeholders.
+  - id: tinjauan_pustaka
+    title: Tinjauan Pustaka
+    filename: 05_tinjauan_pustaka.md
+    order: 5
+    guidance: >-
+      Kelompokkan literatur menurut tema, bandingkan temuan, dan tunjukkan celah yang diisi.
+      EN: Group the literature by theme, compare findings, and identify the gap being addressed.
+  - id: metode
+    title: Metode Penelitian
+    filename: 06_metode.md
+    order: 6
+    guidance: >-
+      Desain, populasi dan sampel, instrumen, prosedur, serta teknik analisis yang direncanakan.
+      EN: Planned design, population and sample, instruments, procedure, and analysis technique.
+  - id: jadwal
+    title: Jadwal Penelitian
+    filename: 07_jadwal.md
+    order: 7
+    guidance: >-
+      Sajikan tabel jadwal per tahap dalam bentuk tabel Markdown dengan bulan sebagai kolom.
+      EN: Present the schedule per stage as a Markdown table with months as columns.
+  - id: anggaran
+    title: Anggaran Penelitian
+    filename: 08_anggaran.md
+    order: 8
+    guidance: >-
+      Rincikan biaya per komponen dalam tabel Markdown beserta total dan justifikasinya.
+      EN: Itemize costs per component in a Markdown table with a total and its justification.

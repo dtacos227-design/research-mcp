@@ -1,0 +1,99 @@
+id: rapid_synthesis
+label: Sintesis Cepat (Rapid Review)
+description: >-
+  Sintesis bukti cepat dan transparan; A4, margin 2.5 cm, spasi 1.5, sitasi Vancouver,
+  protokol pencarian yang dapat diaudit.
+  EN: Rapid, transparent evidence synthesis; A4, 2.5 cm margins, 1.5 spacing, Vancouver
+  citations, and an auditable search protocol.
+citation: vancouver
+export:
+  docx_template: default_academic
+  latex_template: article_id
+guidance: >-
+  Gunakan gaya ini untuk rapid evidence synthesis: dokumentasikan setiap keputusan pencarian
+  dan seleksi agar hasil dapat direproduksi dalam hitungan hari, bukan bulan.
+  EN: Use this style for a rapid evidence synthesis: document every search and selection
+  decision so the result can be reproduced in days rather than months.
+formatting:
+  paper_size: A4
+  margin_cm: {top: 2.5, right: 2.5, bottom: 2.5, left: 2.5}
+  line_spacing: 1.5
+  justify: true
+  font_family: Times New Roman
+  font_size_pt: 12
+  heading_numbering: arabic
+  page_number_position: footer_center
+  page_number_format: decimal
+  two_column: false
+outline:
+  - id: abstrak
+    title: Abstrak
+    filename: 00_abstrak.md
+    order: 1
+    kind: front_matter
+    guidance: >-
+      Abstrak terstruktur: tujuan, metode, jumlah studi, temuan utama, dan kesimpulan.
+      EN: Structured abstract: objective, methods, number of studies, main findings, and conclusion.
+  - id: latar_belakang
+    title: Latar Belakang
+    filename: 01_latar_belakang.md
+    order: 2
+    guidance: >-
+      Jelaskan keputusan mendesak yang memerlukan sintesis bukti dan alasan memilih rapid review.
+      EN: Explain the time-sensitive decision requiring evidence synthesis and why a rapid review.
+  - id: pertanyaan_penelitian
+    title: Pertanyaan Penelitian
+    filename: 02_pertanyaan_penelitian.md
+    order: 3
+    guidance: >-
+      Rumuskan pertanyaan dengan kerangka PICO atau SPIDER, termasuk batas populasi dan hasil.
+      EN: Frame the question with PICO or SPIDER, including population and outcome boundaries.
+  - id: strategi_pencarian
+    title: Strategi Pencarian
+    filename: 03_strategi_pencarian.md
+    order: 4
+    guidance: >-
+      Catat basis data, string pencarian lengkap, rentang tahun, dan tanggal pencarian.
+      EN: Record databases, the full search strings, year ranges, and the search date.
+  - id: seleksi_studi
+    title: Seleksi Studi
+    filename: 04_seleksi_studi.md
+    order: 5
+    guidance: >-
+      Laporkan kriteria inklusi dan eksklusi serta jumlah studi pada setiap tahap penyaringan.
+      EN: Report inclusion and exclusion criteria plus study counts at each screening stage.
+  - id: ekstraksi_data
+    title: Ekstraksi Data
+    filename: 05_ekstraksi_data.md
+    order: 6
+    guidance: >-
+      Sajikan tabel ekstraksi berisi desain, sampel, intervensi, dan hasil tiap studi.
+      EN: Provide an extraction table with design, sample, intervention, and outcomes per study.
+  - id: sintesis
+    title: Sintesis Temuan
+    filename: 06_sintesis.md
+    order: 7
+    guidance: >-
+      Narasikan pola lintas studi; bila meta-analisis tidak layak, jelaskan alasannya.
+      EN: Narrate cross-study patterns and explain why meta-analysis was not feasible, if so.
+  - id: keterbatasan
+    title: Keterbatasan
+    filename: 07_keterbatasan.md
+    order: 8
+    guidance: >-
+      Akui bias seleksi, cakupan basis data terbatas, dan dampaknya pada kekuatan simpulan.
+      EN: Acknowledge selection bias, limited database coverage, and the effect on conclusion strength.
+  - id: kesimpulan
+    title: Kesimpulan
+    filename: 08_kesimpulan.md
+    order: 9
+    guidance: >-
+      Nyatakan rekomendasi untuk pengambil keputusan dan prioritas penelitian berikutnya.
+      EN: State recommendations for decision makers and priorities for further research.
+  - id: referensi
+    title: Referensi
+    filename: 09_referensi.md
+    order: 10
+    guidance: >-
+      Daftar referensi gaya Vancouver dari bibliography proyek; jangan menyunting manual.
+      EN: Vancouver-style reference list generated from the project bibliography; do not edit by hand.

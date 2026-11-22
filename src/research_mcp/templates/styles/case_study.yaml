@@ -1,0 +1,85 @@
+id: case_study
+label: Studi Kasus (Case Study)
+description: >-
+  Artikel studi kasus kualitatif; A4, margin 2.5 cm, spasi 1.5, sitasi APA, narasi mendalam
+  tentang satu kasus atau organisasi.
+  EN: Qualitative case study article; A4, 2.5 cm margins, 1.5 spacing, APA citations, and a
+  thick narrative description of a single case or organisation.
+citation: apa
+export:
+  docx_template: default_academic
+  latex_template: article_id
+guidance: >-
+  Gunakan gaya ini untuk studi kasus kualitatif: jelaskan batas kasus, kumpulkan bukti dari
+  beberapa sumber, lalu bangun temuan tematik yang dapat dilacak ke data.
+  EN: Use this style for a qualitative case study: bound the case, triangulate evidence from
+  multiple sources, and build thematic findings traceable to the data.
+formatting:
+  paper_size: A4
+  margin_cm: {top: 2.5, right: 2.5, bottom: 2.5, left: 2.5}
+  line_spacing: 1.5
+  justify: true
+  font_family: Times New Roman
+  font_size_pt: 12
+  heading_numbering: none
+  page_number_position: footer_center
+  page_number_format: decimal
+  two_column: false
+outline:
+  - id: abstrak
+    title: Abstrak
+    filename: 00_abstrak.md
+    order: 1
+    kind: front_matter
+    guidance: >-
+      Ringkasan 150-250 kata berisi kasus, pertanyaan, metode, temuan, dan kontribusi.
+      EN: 150-250 word summary of the case, question, method, findings, and contribution.
+  - id: latar_belakang
+    title: Latar Belakang
+    filename: 01_latar_belakang.md
+    order: 2
+    guidance: >-
+      Konteks teoretis dan praktis yang menjadikan kasus ini penting untuk diteliti.
+      EN: Theoretical and practical context that makes this case worth studying.
+  - id: konteks_kasus
+    title: Konteks Kasus
+    filename: 02_konteks_kasus.md
+    order: 3
+    guidance: >-
+      Batas kasus, profil organisasi atau lokus, periode, dan unit analisis.
+      EN: Case boundaries, organisation or site profile, time period, and unit of analysis.
+  - id: metode
+    title: Metode Penelitian
+    filename: 03_metode.md
+    order: 4
+    guidance: >-
+      Pendekatan kualitatif, teknik pemilihan informan, sumber bukti, dan analisis tematik.
+      EN: Qualitative approach, informant selection, sources of evidence, and thematic analysis.
+  - id: temuan
+    title: Temuan
+    filename: 04_temuan.md
+    order: 5
+    guidance: >-
+      Sajikan tema beserta kutipan partisipan dan bukti dokumenter yang mendukungnya.
+      EN: Present themes together with participant quotes and supporting documentary evidence.
+  - id: pembahasan
+    title: Pembahasan
+    filename: 05_pembahasan.md
+    order: 6
+    guidance: >-
+      Hubungkan tema dengan teori dan literatur sejenis; jelaskan kondisi yang membatasi transfer.
+      EN: Link the themes to theory and comparable literature; state the limits on transferability.
+  - id: kesimpulan
+    title: Kesimpulan
+    filename: 06_kesimpulan.md
+    order: 7
+    guidance: >-
+      Ringkas jawaban atas pertanyaan kasus, implikasi praktis, dan agenda riset lanjutan.
+      EN: Summarize the answer to the case question, practical implications, and future research.
+  - id: referensi
+    title: Referensi
+    filename: 07_referensi.md
+    order: 8
+    guidance: >-
+      Daftar referensi final dari bibliography proyek; jangan menulis entri secara manual.
+      EN: Final reference list generated from the project bibliography; never type entries by hand.

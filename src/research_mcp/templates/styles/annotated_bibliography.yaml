@@ -1,0 +1,64 @@
+id: annotated_bibliography
+label: Bibliografi Beranotasi
+description: >-
+  Bibliografi beranotasi; A4, margin 2.5 cm, spasi 1.5, sitasi APA, satu blok anotasi
+  per sumber yang dibahas.
+  EN: Annotated bibliography; A4, 2.5 cm margins, 1.5 spacing, APA citations, and one
+  annotation block per source discussed.
+citation: apa
+export:
+  docx_template: default_academic
+  latex_template: article_id
+guidance: >-
+  Gunakan gaya ini untuk memetakan literatur: tulis satu anotasi kritis per sumber, lalu
+  akhiri dengan sintesis tematik yang menghubungkan sumber-sumber tersebut.
+  EN: Use this style to map the literature: write one critical annotation per source, then
+  close with a thematic synthesis connecting those sources.
+formatting:
+  paper_size: A4
+  margin_cm: {top: 2.5, right: 2.5, bottom: 2.5, left: 2.5}
+  line_spacing: 1.5
+  justify: true
+  font_family: Times New Roman
+  font_size_pt: 12
+  heading_numbering: none
+  page_number_position: footer_center
+  page_number_format: decimal
+  two_column: false
+outline:
+  - id: ruang_lingkup
+    title: Ruang Lingkup
+    filename: 00_ruang_lingkup.md
+    order: 1
+    kind: front_matter
+    guidance: >-
+      Jelaskan topik, kriteria pemilihan sumber, rentang tahun, dan cara membaca anotasi.
+      EN: State the topic, source selection criteria, year range, and how to read the annotations.
+  - id: pendahuluan
+    title: Pendahuluan
+    filename: 01_pendahuluan.md
+    order: 2
+    guidance: >-
+      Ringkas lanskap literatur dan alasan sumber-sumber yang dipilih penting untuk topik ini.
+      EN: Summarize the literature landscape and why the selected sources matter for the topic.
+  - id: anotasi
+    title: Anotasi Sumber
+    filename: 02_anotasi.md
+    order: 3
+    guidance: >-
+      Satu blok per sumber: sitasi lengkap, ringkasan argumen, metode, lalu penilaian kritis.
+      EN: One block per source: full citation, argument summary, method, then a critical appraisal.
+  - id: sintesis_tematik
+    title: Sintesis Tematik
+    filename: 03_sintesis_tematik.md
+    order: 4
+    guidance: >-
+      Kelompokkan anotasi menjadi tema, bandingkan posisi tiap sumber, dan tunjukkan celahnya.
+      EN: Group the annotations into themes, compare each source's position, and expose the gaps.
+  - id: referensi
+    title: Referensi
+    filename: 04_referensi.md
+    order: 5
+    guidance: >-
+      Daftar referensi final dari bibliography proyek; jangan menulis entri secara manual.
+      EN: Final reference list generated from the project bibliography; never type entries by hand.

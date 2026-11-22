@@ -1,0 +1,120 @@
+id: tesis_s2
+label: Tesis S2 (Indonesia)
+description: >-
+  Tesis program magister Indonesia; A4, margin 4 cm kiri dan 3 cm lainnya, spasi ganda,
+  bagian awal lebih lengkap daripada skripsi.
+  EN: Indonesian master's thesis; A4, 4 cm left and 3 cm other margins, double spacing,
+  with richer front matter than the undergraduate thesis.
+citation: apa
+export:
+  docx_template: default_academic
+  latex_template: article_id
+guidance: >-
+  Gunakan gaya ini untuk tesis S2: bagian awal mencakup pernyataan keaslian dan daftar
+  singkatan, sedangkan lima bab utama menuntut kontribusi teoretis yang lebih dalam.
+  EN: Use this style for a master's thesis: front matter includes an originality statement and
+  a list of abbreviations, while the five main chapters demand a deeper theoretical contribution.
+formatting:
+  paper_size: A4
+  margin_cm: {top: 3.0, right: 3.0, bottom: 3.0, left: 4.0}
+  line_spacing: 2.0
+  justify: true
+  font_family: Times New Roman
+  font_size_pt: 12
+  heading_numbering: roman_bab
+  page_number_position: footer_center
+  page_number_format: lowerRoman
+  two_column: false
+outline:
+  - id: cover
+    title: Sampul
+    filename: 00_cover.md
+    order: 1
+    kind: front_matter
+    guidance: >-
+      Judul, nama penulis, program studi magister, fakultas, dan tahun; tanpa nomor halaman.
+      EN: Title, author name, master's program, faculty, and year; no page number on the cover.
+  - id: pengesahan
+    title: Lembar Pengesahan
+    filename: 01_pengesahan.md
+    order: 2
+    kind: front_matter
+    guidance: >-
+      Halaman tanda tangan pembimbing, penguji, dan ketua program studi.
+      EN: Signature page for supervisors, examiners, and the head of the study program.
+  - id: abstrak
+    title: Abstrak
+    filename: 02_abstrak.md
+    order: 3
+    kind: front_matter
+    guidance: >-
+      Abstrak 250-300 kata dengan kata kunci, disusul versi bahasa Inggris (Abstract).
+      EN: A 250-300 word abstract with keywords, followed by an English-language Abstract.
+  - id: kata_pengantar
+    title: Kata Pengantar
+    filename: 03_kata_pengantar.md
+    order: 4
+    kind: front_matter
+    guidance: >-
+      Ucapan syukur dan terima kasih secara formal kepada pihak yang mendukung penelitian.
+      EN: Formal acknowledgements to the people and institutions that supported the research.
+  - id: daftar_isi
+    title: Daftar Isi
+    filename: 04_daftar_isi.md
+    order: 5
+    kind: front_matter
+    guidance: >-
+      Daftar isi, daftar tabel, daftar gambar, dan daftar lampiran dibuat otomatis dari heading.
+      EN: Table of contents, list of tables, figures, and appendices generated from the headings.
+  - id: pernyataan
+    title: Pernyataan Keaslian
+    filename: 05_pernyataan.md
+    order: 6
+    kind: front_matter
+    guidance: >-
+      Pernyataan bahwa karya merupakan hasil sendiri dan belum diajukan pada program lain,
+      lengkap dengan tanda tangan dan materai.
+      EN: Statement that the work is original and has not been submitted elsewhere, signed and stamped.
+  - id: daftar_singkatan
+    title: Daftar Singkatan
+    filename: 06_daftar_singkatan.md
+    order: 7
+    kind: front_matter
+    guidance: >-
+      Daftar singkatan dan lambang yang dipakai, diurutkan alfabetis beserta kepanjangannya.
+      EN: Alphabetical list of abbreviations and symbols used, each with its expansion.
+  - id: bab1_pendahuluan
+    title: BAB I Pendahuluan
+    filename: 10_bab1_pendahuluan.md
+    order: 10
+    guidance: >-
+      Latar belakang, rumusan masalah, tujuan, manfaat, kebaruan, dan batasan penelitian.
+      EN: Background, problem statement, objectives, significance, novelty, and scope of the study.
+  - id: bab2_tinjauan_pustaka
+    title: BAB II Tinjauan Pustaka
+    filename: 11_bab2_tinjauan_pustaka.md
+    order: 11
+    guidance: >-
+      Kajian teori mutakhir, state of the art, dan kerangka konseptual penelitian.
+      EN: Review of current theory, the state of the art, and the conceptual framework.
+  - id: bab3_metode
+    title: BAB III Metode Penelitian
+    filename: 12_bab3_metode_penelitian.md
+    order: 12
+    guidance: >-
+      Desain penelitian, populasi dan sampel, instrumen tervalidasi, serta rencana analisis.
+      EN: Research design, population and sample, validated instruments, and the analysis plan.
+  - id: bab4_hasil
+    title: BAB IV Hasil dan Pembahasan
+    filename: 13_bab4_hasil_pembahasan.md
+    order: 13
+    guidance: >-
+      Sajikan hasil, uji hipotesis, lalu bahas implikasi teoretis dan praktisnya.
+      EN: Present results and hypothesis tests, then discuss their theoretical and practical implications.
+  - id: bab5_kesimpulan
+    title: BAB V Kesimpulan dan Saran
+    filename: 14_bab5_kesimpulan_saran.md
+    order: 14
+    guidance: >-
+      Kesimpulan, kontribusi, keterbatasan, dan saran untuk penelitian selanjutnya.
+      EN: Conclusions, contributions, limitations, and suggestions for further research.
