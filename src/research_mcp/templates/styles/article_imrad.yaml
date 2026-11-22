@@ -1,0 +1,22 @@
+id: article_imrad
+label: Artikel Jurnal (IMRaD)
+description: >-
+  Artikel jurnal standar dengan struktur IMRaD; A4, margin 2.5 cm, spasi 1.5, sitasi APA.
+  EN: Standard journal article using the IMRaD structure; A4, 2.5 cm margins, 1.5 spacing, APA.
+citation: apa
+outline:
+  - id: abstract
+    title: Abstract
+    filename: 00_abstract.md
+    order: 1
+    kind: front_matter
+    guidance: >-
+      Ringkasan 150-250 kata berisi tujuan, metode, temuan utama, dan implikasi.
+      EN: 150-250 word summary covering objective, method, key findings, and implications.
+  - id: introduction
+    title: Introduction
+    filename: 01_introduction.md
+    order: 2
+    guidance: >-
+      Latar belakang, kesenjangan riset, dan rumusan pertanyaan penelitian.
+      EN: Background, research gap, and the research question.

@@ -1925,6 +1925,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pymupdf4llm" },
     { name = "python-docx" },
+    { name = "pyyaml" },
     { name = "seaborn" },
     { name = "tenacity" },
 ]
@@ -1951,6 +1952,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "pymupdf4llm", specifier = ">=0.0.17" },
     { name = "python-docx", specifier = ">=1.2.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "seaborn", specifier = ">=0.13.2" },
     { name = "tenacity", specifier = ">=9.0" },
 ]
