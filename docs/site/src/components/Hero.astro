@@ -89,10 +89,17 @@
     <!-- Badge chips -->
     <div class="flex flex-wrap gap-2"
       style="opacity: 0; animation: fadeReveal 0.5s ease-out 3.4s forwards;">
-      {['250M+ paper', '6 database gratis', 'local-first', 'anti-halusinasi', 'MIT license'].map(b => (
+      {[
+        { id: '250M+ paper',       en: '250M+ papers' },
+        { id: '6 database gratis', en: '6 free databases' },
+        { id: 'local-first',       en: 'local-first' },
+        { id: 'anti-halusinasi',   en: 'anti-hallucination' },
+        { id: 'MIT license',       en: 'MIT license' },
+      ].map(b => (
         <span class="font-mono text-xs px-2 py-0.5"
-          style="border: 1px solid #E8D9BC; color: #3D2A22; background-color: #F5EDD8; letter-spacing: 0.03em;">
-          [{b}]
+          style="border: 1px solid #E8D9BC; color: #3D2A22; background-color: #F5EDD8; letter-spacing: 0.03em;"
+          data-id={`[${b.id}]`} data-en={`[${b.en}]`}>
+          [{b.id}]
         </span>
       ))}
     </div>
@@ -149,11 +156,14 @@
     // but just in case there's any whitespace in the h1)
     titleEl.textContent = ''
 
-    const lines   = ['Riset ilmiah —', 'tanpa bayar API,', 'tanpa kebocoran data.']
+    const lang = localStorage.getItem('lang') ?? 'id'
+    const lines = lang === 'en'
+      ? ['Scientific research —', 'no API fees,', 'no data leakage.']
+      : ['Riset ilmiah —', 'tanpa bayar API,', 'tanpa kebocoran data.']
     const fullText = lines.join('\n')
 
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      titleEl.textContent = fullText
+      titleEl.textContent = fullText  // fullText already uses correct lang
       if (cursor) cursor.style.display = 'none'
       return
     }

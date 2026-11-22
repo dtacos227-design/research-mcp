@@ -1,18 +1,16 @@
 ---
 interface Props {
-  /** Monospace command shown before the prompt, e.g. "cara-kerja" */
   slug: string
-  /** Main heading (ID) */
   titleId: string
-  /** Main heading (EN) */
   titleEn: string
-  /** Sub description (ID) */
   descId: string
-  /** Sub description (EN) */
   descEn: string
+  /** Use max-w-5xl for wide table pages (referensi). Default: max-w-3xl */
+  wide?: boolean
 }
 
-const { slug, titleId, titleEn, descId, descEn } = Astro.props
+const { slug, titleId, titleEn, descId, descEn, wide = false } = Astro.props
+const widthClass = wide ? 'max-w-5xl' : 'max-w-3xl'
 ---
 
 <header class="relative overflow-x-hidden pt-14 pb-10 md:pt-20 md:pb-14"
@@ -28,7 +26,7 @@ const { slug, titleId, titleEn, descId, descEn } = Astro.props
     style="left: calc(50% - min(42rem, 46vw) + 2.5rem); width: 1px; background-color: #E09090; opacity: 0.25;">
   </div>
 
-  <div class="relative z-10 max-w-3xl mx-auto px-6">
+  <div class={`relative z-10 ${widthClass} mx-auto px-6`}>
 
     <!-- Terminal prompt line -->
     <p class="font-mono text-xs mb-4 flex items-center gap-2"
