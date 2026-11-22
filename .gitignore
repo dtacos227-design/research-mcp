@@ -1,7 +1,7 @@
 .DS_Store
 .worktrees/
 .superpowers/
-docs/superpowers/
+docs/
 AGENTS.md
 __pycache__/
 *.pyc
