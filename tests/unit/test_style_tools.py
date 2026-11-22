@@ -75,7 +75,7 @@ def _fake_markdown_renderer(recorded):
 
 
 def _fake_docx_renderer(recorded):
-    def fake(markdown, bib_path, csl_path, reference_doc, output, resource_path=None):
+    def fake(markdown, bib_path, csl_path, reference_doc, output, resource_path=None, toc=False):
         recorded.append(markdown)
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(b"docx")
@@ -131,7 +131,9 @@ async def test_handoff_blocked_without_brief(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_live_handoff_uses_the_style_outline_and_warns_once(tmp_path, monkeypatch):
+async def test_live_handoff_uses_the_style_outline_without_false_numbering_warning(
+    tmp_path, monkeypatch
+):
     project, project_dir = await _bootstrap(tmp_path, monkeypatch, style_id="article_imrad")
     await server.save_draft_section(
         project.id, "01_introduction.md", "# Introduction\n\nBody [@doe2024style]."
@@ -147,7 +149,8 @@ async def test_live_handoff_uses_the_style_outline_and_warns_once(tmp_path, monk
     assert result["mode"] == "live_authoring"
     assert recorded[0].index("# Introduction") < recorded[0].index("# Extra")
     assert any("99_extra.md" in warning for warning in result["warnings"])
-    assert len(_numbering_warnings(result["warnings"])) == 1
+    # article_imrad keeps draft headings verbatim, so it must not warn about numbering.
+    assert _numbering_warnings(result["warnings"]) == []
     commands = [step["arguments"].get("command") for step in result["tool_sequence"]]
     assert "layout.margins" in commands
     assert Path(result["handoff_markdown_path"]).is_relative_to(project_dir)

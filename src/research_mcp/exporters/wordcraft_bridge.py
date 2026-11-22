@@ -446,8 +446,59 @@ def _style_warnings(style: StyleSpec) -> list[str]:
     ]
 
 
+_TOC_MARKERS = ("daftarisi", "tableofcontents", "contents")
+
+
+def _outline_key(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", text.casefold())
+
+
+def _is_toc_heading(text: str) -> bool:
+    key = _outline_key(text)
+    return any(marker in key for marker in _TOC_MARKERS)
+
+
+def _style_has_toc(style: StyleSpec | None) -> bool:
+    if style is None:
+        return False
+    return any(
+        _is_toc_heading(section.title) or _is_toc_heading(section.id) for section in style.outline
+    )
+
+
+def _insert_toc(blocks: list[dict], style: StyleSpec | None) -> list[dict]:
+    """Replace a style's table-of-contents section with a generated TOC block.
+
+    The outline's "Daftar Isi"/"Contents" chapter is a placeholder: WordCraft
+    generates the real TOC with ``references.toc``. The heading and any skeleton
+    body are dropped so the document does not end up with an empty heading in
+    front of the generated list.
+    """
+    if not _style_has_toc(style):
+        return blocks
+    result: list[dict] = []
+    skipping = False
+    for block in blocks:
+        if block["kind"] == "heading":
+            if _is_toc_heading(block["text"]):
+                result.append({"kind": "toc", "title": block["text"]})
+                skipping = True
+                continue
+            skipping = False
+        if skipping:
+            continue
+        result.append(block)
+    return result
+
+
 def _block_steps(block: dict) -> list[dict]:
     kind = block["kind"]
+    if kind == "toc":
+        return [
+            _execute("references.toc", {"levels": 3, "title": block.get("title") or "Contents"}),
+            _execute("caret.docEnd"),
+            _NEW_PARA,
+        ]
     if kind == "heading":
         level = block["level"]
         text = _strip_md_inline(block["text"])
@@ -578,6 +629,7 @@ def build_blueprint(
     root = project_dir or (exports_dir.parent if exports_dir.name == "exports" else exports_dir)
     parsed = parse_markdown_blocks(markdown, root)
     blocks, bibliography = split_bibliography(parsed)
+    blocks = _insert_toc(blocks, style)
     warnings = [
         f"Figure path does not exist: {block['path']}"
         for block in blocks

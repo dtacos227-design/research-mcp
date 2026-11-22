@@ -61,7 +61,7 @@ async def _bootstrap(
 def _fake_render_docx(recorded, payload=b"rendered"):
     def fake(markdown, *args, **kwargs):
         output = args[-1]
-        recorded.append({"markdown": markdown, "output": output})
+        recorded.append({"markdown": markdown, "output": output, "toc": kwargs.get("toc")})
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(payload)
         return output
@@ -126,6 +126,8 @@ async def test_export_reports_style_id(tmp_path, monkeypatch):
     assert result["cited_but_missing"] == []
     assert len(result["warnings"]) == 1
     assert "numbering" in result["warnings"][0].lower()
+    # skripsi_s1 has a Daftar Isi section, so the DOCX gets a generated TOC.
+    assert rendered[0]["toc"] is True
     assert "# BAB I Pendahuluan" in rendered[0]["markdown"]
     assert formatted == [(rendered[0]["output"], get_style("skripsi_s1").formatting)]
     assert len(polished) == 1
@@ -157,8 +159,9 @@ async def test_unnumbered_style_gets_no_numbering_warning(tmp_path, monkeypatch)
     await server.save_draft_section(
         project.id, "01_introduction.md", "# Introduction\n\nBody [@doe2024gate]."
     )
-    _rendered, _formatted, _polished = _patch_export_side_effects(monkeypatch)
+    rendered, _formatted, _polished = _patch_export_side_effects(monkeypatch)
 
     result = await server.export_to_docx(project.id, "paper")
 
     assert not any("numbering" in warning.lower() for warning in result["warnings"])
+    assert rendered[0]["toc"] is False

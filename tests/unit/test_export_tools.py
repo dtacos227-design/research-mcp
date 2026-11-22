@@ -230,6 +230,7 @@ async def test_latex_export_reports_tex_and_pdf_paths(project_with_drafts, monke
         output_tex,
         resource_path=None,
         metadata=None,
+        toc=False,
     ):
         recorded.append(
             {

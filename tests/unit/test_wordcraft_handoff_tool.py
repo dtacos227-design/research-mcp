@@ -102,8 +102,8 @@ def _skip_docx_formatting(monkeypatch):
 
 
 def _fake_docx_renderer(recorded, payload=b"docx"):
-    def fake(markdown, bib_path, csl_path, reference_doc, output, resource_path=None):
-        recorded.append({"markdown": markdown, "output": output})
+    def fake(markdown, bib_path, csl_path, reference_doc, output, resource_path=None, toc=False):
+        recorded.append({"markdown": markdown, "output": output, "toc": toc})
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(payload)
         return output

@@ -30,6 +30,7 @@ def render_latex(
     output_tex: Path,
     resource_path: Path | None = None,
     metadata: dict[str, str] | None = None,
+    toc: bool = False,
 ) -> Path:
     """Render merged Markdown to a standalone `.tex` document via Pandoc + Citeproc.
 
@@ -47,6 +48,7 @@ def render_latex(
         "latex",
         "--standalone",
         "--citeproc",
+        *(["--toc"] if toc else []),
         "--metadata",
         "reference-section-title=References",
         *_metadata_args(metadata),

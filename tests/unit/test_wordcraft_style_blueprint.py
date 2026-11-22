@@ -136,6 +136,43 @@ def test_polish_sequence_without_style_has_no_page_setup(tmp_path):
     assert "layout.margins" not in commands
 
 
+def test_toc_section_becomes_a_generated_toc_and_skips_its_body(tmp_path):
+    (tmp_path / "exports").mkdir()
+    markdown = (
+        "# Sampul\n\nJudul.\n\n"
+        "# Daftar Isi\n\nDaftar isi dibuat otomatis.\n\n"
+        "# BAB I Pendahuluan\n\nIsi bab satu.\n"
+    )
+    md = tmp_path / "d.md"
+    md.write_text(markdown)
+    style = registry.get_style("skripsi_s1")
+
+    bp = wb.build_blueprint("P", md, markdown, [], "apa", tmp_path / "exports", "out", style=style)
+
+    commands = _commands(bp["tool_sequence"])
+    toc_at = commands.index("references.toc")
+    assert commands[toc_at + 1] == "caret.docEnd"
+    types = [
+        step["arguments"].get("text", "")
+        for step in bp["tool_sequence"]
+        if step["tool"] == "type_text"
+    ]
+    assert not any("Daftar Isi" in text for text in types)
+    assert not any("dibuat otomatis" in text for text in types)
+    assert any("Isi bab satu." in text for text in types)
+    toc_index = next(
+        index
+        for index, step in enumerate(bp["tool_sequence"])
+        if step["arguments"].get("command") == "references.toc"
+    )
+    body_index = next(
+        index
+        for index, step in enumerate(bp["tool_sequence"])
+        if step["tool"] == "type_text" and "Isi bab satu." in step["arguments"].get("text", "")
+    )
+    assert toc_index < body_index
+
+
 def test_bibliography_leaves_generated_content(tmp_path):
     markdown = "# Intro\n\nBody.\n\n# References\n\nDoe, J. (2024). Valid Paper.\n"
     bp = wb.build_blueprint("T", tmp_path / "h.md", markdown, [], "apa", tmp_path, "out")

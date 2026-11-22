@@ -59,6 +59,7 @@ def _fake_render_latex(recorded):
         output_tex,
         resource_path=None,
         metadata=None,
+        toc=False,
     ):
         recorded.append(
             {
@@ -67,6 +68,7 @@ def _fake_render_latex(recorded):
                 "csl": csl_path,
                 "resource_path": resource_path,
                 "metadata": metadata,
+                "toc": toc,
             }
         )
         output_tex.parent.mkdir(parents=True, exist_ok=True)
@@ -118,6 +120,21 @@ async def test_latex_export_uses_style_template_csl_and_formatting(tmp_path, mon
     assert metadata["papersize"] == "letter"
     assert "# Introduction" in recorded[0]["markdown"]
     assert "Exported draft(s) not in the style outline: 99_notes.md" in result["warnings"]
+
+
+@pytest.mark.asyncio
+async def test_latex_export_requests_toc_for_a_toc_style(tmp_path, monkeypatch):
+    pid, _workspace_root = await _seed_ready_project(tmp_path, monkeypatch, style="skripsi_s1")
+    await server.save_draft_section(
+        pid.id, "10_bab1_pendahuluan.md", "# Pendahuluan\n\nIsi bab satu."
+    )
+    recorded: list[dict] = []
+    monkeypatch.setattr(server.latex_engine, "render_latex", _fake_render_latex(recorded))
+
+    result = await server.export_to_latex(pid.id, "paper", compile_pdf=False)
+
+    assert result["style_id"] == "skripsi_s1"
+    assert recorded[0]["toc"] is True
 
 
 def test_latex_warns_when_the_style_asks_for_no_page_numbers():

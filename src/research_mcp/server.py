@@ -718,6 +718,23 @@ async def _precondition_failed(conn, project_id: str, style: StyleSpec) -> dict 
     }
 
 
+_TOC_MARKERS = ("daftarisi", "tableofcontents", "contents")
+
+
+def _outline_key(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", text.casefold())
+
+
+def _is_toc_section(section: SectionSpec) -> bool:
+    """True for outline sections that stand for an auto-generated table of contents."""
+    keys = (_outline_key(section.title), _outline_key(section.id))
+    return any(marker in key for key in keys for marker in _TOC_MARKERS)
+
+
+def _style_toc_section(style: StyleSpec) -> SectionSpec | None:
+    return next((section for section in style.outline if _is_toc_section(section)), None)
+
+
 def _is_bibliography_section(section: SectionSpec) -> bool:
     """True for outline sections that name the reference list.
 
@@ -834,6 +851,7 @@ async def _render_docx_export(
     polish: bool,
     strict_citations: bool,
     style: StyleSpec,
+    toc: bool = False,
 ) -> tuple[Path, list[str], list[str]]:
     """Render the merged draft to `exports/<output_name>.docx` behind the citation gate."""
     output = _export_target(project_dir, output_name, ".docx")
@@ -857,6 +875,7 @@ async def _render_docx_export(
             reference_doc,
             output,
             resource_path=project_dir,
+            toc=toc,
         )
     apply_docx_formatting(output, style.formatting)
     if polish:
@@ -1071,6 +1090,7 @@ async def export_to_docx(
                 polish,
                 strict_citations,
                 resolved_style,
+                toc=_style_toc_section(resolved_style) is not None,
             )
             return {
                 "output_path": str(output),
@@ -1151,6 +1171,7 @@ async def export_to_latex(
                     tex_path,
                     resource_path=project_dir,
                     metadata=latex_metadata(resolved_style.formatting),
+                    toc=_style_toc_section(resolved_style) is not None,
                 )
 
             pdf_path: Path | None = None
@@ -1223,7 +1244,14 @@ async def export_to_markdown_bundle(
             bib_path, _csl_json = await _refresh_bibliography(conn, project_id, project_dir)
 
             with bundled_template(f"csl/{csl_name}.csl") as csl_path:
-                render_markdown(markdown, bib_path, csl_path, output, resource_path=project_dir)
+                render_markdown(
+                    markdown,
+                    bib_path,
+                    csl_path,
+                    output,
+                    resource_path=project_dir,
+                    toc=_style_toc_section(resolved_style) is not None,
+                )
 
             return {
                 "output_path": str(output),
