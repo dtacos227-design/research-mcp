@@ -3,7 +3,6 @@
 .superpowers/
 docs/superpowers/
 AGENTS.md
-README.md
 __pycache__/
 *.pyc
 .venv/
