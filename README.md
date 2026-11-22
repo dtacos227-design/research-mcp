@@ -30,9 +30,9 @@ Setiap proyek mengikuti satu **research style**: kerangka bab, format halaman (m
 | `article_imrad` | Artikel jurnal IMRaD (A4, 2.5 cm, 1.5×, APA) |
 | `ieee_paper` | Paper konferensi IEEE dua kolom (`ieee`) |
 | `skripsi_s1` | Skripsi S1 Indonesia — BAB I–V, margin 4-3-3-3, 2×, TNR 12 |
-| `tesis_s2` | Tesis S2 Indonesia — skripsi S1 + pengesahan & pernyataan keaslian |
+| `tesis_s2` | Tesis S2 Indonesia — skripsi S1 + pernyataan keaslian & daftar singkatan |
 | `proposal_penelitian` | Proposal penelitian/hibah (latar belakang s.d. anggaran) |
-| `case_study` | Laporan studi kasus naratif yang ringkas |
+| `case_study` | Laporan studi kasus naratif mendalam |
 | `rapid_synthesis` | Sintesis cepat / policy brief (`vancouver`) |
 | `annotated_bibliography` | Bibliografi beranotasi per entri |
 
@@ -50,6 +50,17 @@ Pakai `list_research_styles` untuk daftar id + outline tiap gaya, dan `get_resea
 6. `export_to_docx`, `export_to_latex`, atau `prepare_wordcraft_handoff` — ketiganya mewarisi style proyek (urutan gabung bab, page setup, sitasi default); `style=` menimpa untuk satu pemanggilan, `csl_style=` menimpa sitasi saja.
 
 **Gate.** Ketiga exporter menolak berjalan dan mengembalikan `status: "precondition_failed"` beserta daftar `failed` dan langkah `remediation` bila research brief belum lengkap **atau** belum ada paper tersimpan. Tidak ada file yang ditulis sebelum gate lolos.
+
+**Pemakaian modular.** Setiap bagian bisa dipakai sendiri-sendiri; tidak semua membutuhkan research brief.
+
+| Kebutuhan | Cara pakai |
+| :--- | :--- |
+| Cari literatur saja | `search_papers`, `get_citation_graph`, `resolve_doi` — tanpa brief |
+| Kelola paper/PDF saja | `save_paper_to_project`, `import_local_pdf`, `list_paper_sections`, `read_paper_section`, `search_local_library` — tanpa brief |
+| Sitasi/bibliografi saja | `generate_bibliography`, `verify_citations` — tanpa brief |
+| Grafik saja | `generate_chart` — tanpa brief |
+| Tulis bab | `save_draft_section` butuh brief lengkap, atau lewati dengan `format_only=True` |
+| Format dokumen saja | beri `format_only=True` pada `export_to_docx` / `export_to_latex` / `export_to_markdown_bundle` / `prepare_wordcraft_handoff` — gate brief & paper dilewati, gaya tetap diterapkan (`style=` eksplisit, atau default `article_imrad`) |
 
 > **Catatan:** ingesti template `.docx`/`.pdf` milik pengguna (mis. template skripsi kampus) belum tersedia — itu masuk **Phase 2**. Saat ini template ekspor hanya yang dibundel: `.docx` `default_academic` dan LaTeX `article_id` / `ieee`.
 

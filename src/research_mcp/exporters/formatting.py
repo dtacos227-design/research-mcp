@@ -301,6 +301,11 @@ _H1_RE = re.compile(r"^[ \t]*#(?!#)[ \t]*(.+?)[ \t]*$")
 _NON_ALNUM_RE = re.compile(r"[\W_]+", re.UNICODE)
 
 
+def strip_guidance_comments(markdown: str) -> str:
+    """Remove HTML comment blocks (skeleton guidance) from Markdown text."""
+    return _HTML_COMMENT_RE.sub("", markdown)
+
+
 def _heading_key(text: str) -> str:
     """Loose comparison key: no ``BAB <roman>`` prefix, punctuation or spaces."""
     return _NON_ALNUM_RE.sub("", _BAB_PREFIX_RE.sub("", text)).casefold()
@@ -316,7 +321,7 @@ def normalize_chapter_markdown(markdown: str, section: SectionSpec) -> str:
     H1 gets one prepended. HTML comments from the skeleton guidance are stripped
     so they cannot leak into an export.
     """
-    lines = _HTML_COMMENT_RE.sub("", markdown).split("\n")
+    lines = strip_guidance_comments(markdown).split("\n")
     start = 0
     while start < len(lines) and not lines[start].strip():
         start += 1

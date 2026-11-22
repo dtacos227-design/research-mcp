@@ -19,6 +19,7 @@ from research_mcp.exporters.formatting import (
     apply_docx_formatting,
     latex_metadata,
     normalize_chapter_markdown,
+    strip_guidance_comments,
 )
 from research_mcp.exporters.pandoc_engine import (
     _read_draft,
@@ -530,12 +531,15 @@ async def save_draft_section(
     filename: str,
     content: str,
     order: int | None = None,
+    format_only: bool = False,
 ) -> dict:
     """Save or update a draft Markdown chapter (e.g. 01_abstract.md) in this project.
 
     Drafting is gated on the research brief (spec §6.5): an incomplete brief
     returns `needs_input` with the questions to ask and writes nothing, so no
-    chapter can be started before the user has confirmed the intake.
+    chapter can be started before the user has confirmed the intake. Pass
+    `format_only=True` to write a chapter for a document that is only being
+    formatted (no research brief required).
     """
     try:
         settings = get_settings()
@@ -545,7 +549,7 @@ async def save_draft_section(
             stored = await repository.get_project_brief(conn, project_id)
             brief = ResearchBrief.model_validate(stored or {})
             missing = brief.missing()
-            if missing:
+            if missing and not format_only:
                 style = await _resolve_style_for_export(conn, project_id, brief.style_id)
                 return {
                     "status": "needs_input",
@@ -792,7 +796,7 @@ def _style_merge_markdown(
             text = _read_draft(path)
             if text:
                 extra_files.append(path.name)
-                pieces.append(text)
+                pieces.append(strip_guidance_comments(text))
 
     return "\n\n".join(pieces), extra_files
 
@@ -1086,6 +1090,7 @@ async def export_to_docx(
     polish: bool = True,
     strict_citations: bool = True,
     style: str | None = None,
+    format_only: bool = False,
 ) -> dict:
     """Export every draft chapter to one `.docx` via Pandoc + Citeproc.
 
@@ -1096,6 +1101,8 @@ async def export_to_docx(
 
     The export refuses to run until the research brief is complete and at least
     one paper is saved, returning `precondition_failed` with remediation steps.
+    Pass `format_only=True` to format an existing document without the research
+    brief or a saved paper (the resolved style still applies).
     """
     try:
         settings = get_settings()
@@ -1103,9 +1110,10 @@ async def export_to_docx(
         try:
             project = await _get_project_or_raise(conn, project_id)
             resolved_style = await _resolve_style_for_export(conn, project_id, style)
-            blocked = await _precondition_failed(conn, project_id, resolved_style)
-            if blocked is not None:
-                return blocked
+            if not format_only:
+                blocked = await _precondition_failed(conn, project_id, resolved_style)
+                if blocked is not None:
+                    return blocked
 
             project_dir = _project_dir(settings, project)
             effective_csl = csl_style or resolved_style.citation
@@ -1125,6 +1133,7 @@ async def export_to_docx(
                 "output_path": str(output),
                 "format": "docx",
                 "style_id": resolved_style.id,
+                "format_only": format_only,
                 "csl_style": effective_csl,
                 "template_name": template_name,
                 "cited_but_missing": missing,
@@ -1152,6 +1161,7 @@ async def export_to_latex(
     compile_pdf: bool = True,
     strict_citations: bool = True,
     style: str | None = None,
+    format_only: bool = False,
 ) -> dict:
     """Export every draft chapter to a standalone `.tex`, optionally compiling a PDF.
 
@@ -1164,15 +1174,18 @@ async def export_to_latex(
 
     The export refuses to run until the research brief is complete and at least
     one paper is saved, returning `precondition_failed` with remediation steps.
+    Pass `format_only=True` to format an existing document without the research
+    brief or a saved paper (the resolved style still applies).
     """
     try:
         settings = get_settings()
         conn = await get_connection(settings.db_path)
         try:
             resolved_style = await _resolve_style_for_export(conn, project_id, style)
-            blocked = await _precondition_failed(conn, project_id, resolved_style)
-            if blocked is not None:
-                return blocked
+            if not format_only:
+                blocked = await _precondition_failed(conn, project_id, resolved_style)
+                if blocked is not None:
+                    return blocked
 
             project = await _get_project_or_raise(conn, project_id)
             project_dir = _project_dir(settings, project)
@@ -1214,6 +1227,7 @@ async def export_to_latex(
                 "output_path": str(pdf_path or tex_path),
                 "format": "latex",
                 "style_id": resolved_style.id,
+                "format_only": format_only,
                 "tex_path": str(tex_path),
                 "pdf_path": str(pdf_path) if pdf_path else None,
                 "template_name": latex_name,
@@ -1242,6 +1256,7 @@ async def export_to_markdown_bundle(
     csl_style: str | None = None,
     strict_citations: bool = True,
     style: str | None = None,
+    format_only: bool = False,
 ) -> dict:
     """Merge all draft chapters into one Citeproc-rendered Markdown file.
 
@@ -1252,7 +1267,8 @@ async def export_to_markdown_bundle(
 
     The export refuses to run until the research brief is complete and at least
     one paper is saved, returning `precondition_failed` plus `style_id` and
-    remediation steps.
+    remediation steps. Pass `format_only=True` to format an existing document
+    without the research brief or a saved paper.
     """
     try:
         settings = get_settings()
@@ -1260,9 +1276,10 @@ async def export_to_markdown_bundle(
         try:
             project = await _get_project_or_raise(conn, project_id)
             resolved_style = await _resolve_style_for_export(conn, project_id, style)
-            blocked = await _precondition_failed(conn, project_id, resolved_style)
-            if blocked is not None:
-                return {**blocked, "style_id": resolved_style.id}
+            if not format_only:
+                blocked = await _precondition_failed(conn, project_id, resolved_style)
+                if blocked is not None:
+                    return {**blocked, "style_id": resolved_style.id}
 
             project_dir = _project_dir(settings, project)
             output = _export_target(project_dir, output_name, ".md")
@@ -1285,6 +1302,7 @@ async def export_to_markdown_bundle(
                 "output_path": str(output),
                 "format": "markdown",
                 "style_id": resolved_style.id,
+                "format_only": format_only,
                 "csl_style": effective_csl,
                 "cited_but_missing": missing,
                 "warnings": [
@@ -1438,6 +1456,7 @@ async def prepare_wordcraft_handoff(
     strict_citations: bool = True,
     output_name: str = "manuscript",
     style: str | None = None,
+    format_only: bool = False,
 ) -> dict:
     """Hand a citation-verified draft to WordCraft as a blueprint, a seed DOCX or a job script.
 
@@ -1463,9 +1482,10 @@ async def prepare_wordcraft_handoff(
         try:
             project = await _get_project_or_raise(conn, project_id)
             resolved_style = await _resolve_style_for_export(conn, project_id, style)
-            blocked = await _precondition_failed(conn, project_id, resolved_style)
-            if blocked is not None:
-                return {**blocked, "style_id": resolved_style.id}
+            if not format_only:
+                blocked = await _precondition_failed(conn, project_id, resolved_style)
+                if blocked is not None:
+                    return {**blocked, "style_id": resolved_style.id}
 
             project_dir = _project_dir(settings, project)
             exports_dir = project_dir / "exports"
@@ -1475,6 +1495,7 @@ async def prepare_wordcraft_handoff(
                 "project_id": project.id,
                 "mode": mode,
                 "style_id": resolved_style.id,
+                "format_only": format_only,
                 "csl_style": effective_csl,
                 "cited_but_missing": [],
                 "handoff_markdown_path": None,
