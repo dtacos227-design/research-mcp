@@ -77,7 +77,7 @@ def _patch_export_side_effects(monkeypatch):
     monkeypatch.setattr(
         server,
         "apply_docx_formatting",
-        lambda path, fmt: formatted.append((path, fmt)),
+        lambda path, fmt, **kwargs: formatted.append((path, fmt)),
     )
     monkeypatch.setattr(server, "polish_docx", lambda path, title: polished.append((path, title)))
     return rendered, formatted, polished

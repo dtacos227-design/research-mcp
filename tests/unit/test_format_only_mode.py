@@ -58,7 +58,7 @@ async def test_docx_format_only_skips_gate(project, monkeypatch):
         return output
 
     monkeypatch.setattr(server, "render_docx", fake_render)
-    monkeypatch.setattr(server, "apply_docx_formatting", lambda path, fmt: None)
+    monkeypatch.setattr(server, "apply_docx_formatting", lambda path, fmt, **kwargs: None)
     monkeypatch.setattr(server, "polish_docx", lambda path, title: None)
 
     result = await server.export_to_docx(created["id"], "out", format_only=True)

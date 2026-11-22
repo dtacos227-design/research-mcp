@@ -9,6 +9,7 @@ from research_mcp.providers.base import (
     normalize_doi,
     normalize_title,
 )
+from research_mcp.providers.cache import SearchCache
 from research_mcp.providers.crossref import CROSSREF
 from research_mcp.providers.openalex import OPENALEX
 from research_mcp.providers.pubmed import PUBMED
@@ -18,6 +19,14 @@ from research_mcp.providers.semantic_scholar import SEMANTIC_SCHOLAR
 class AggregatedSearch(BaseModel):
     results: list[SearchResult] = Field(default_factory=list)
     errors: dict[str, str] = Field(default_factory=dict)
+
+
+_CACHE = SearchCache()
+
+
+def clear_search_cache() -> None:
+    """Drop memoised searches (tests and long campaigns use this)."""
+    _CACHE.clear()
 
 
 def _providers() -> dict[str, LiteratureProvider]:
@@ -70,6 +79,17 @@ async def search_all(
     year_to: int | None,
     limit: int,
 ) -> AggregatedSearch:
+    cache_key = (
+        " ".join(query.split()).casefold(),
+        tuple(sorted(sources)),
+        year_from,
+        year_to,
+        limit,
+    )
+    cached = _CACHE.get(cache_key)
+    if cached is not None:
+        return cached.model_copy(deep=True)
+
     providers = _providers()
     chosen = [(name, providers[name]) for name in sources if name in providers]
     outcomes = await asyncio.gather(
@@ -87,4 +107,9 @@ async def search_all(
             if not _is_duplicate(result, merged):
                 merged.append(result)
 
-    return AggregatedSearch(results=_interleave(sources, merged)[:limit], errors=errors)
+    outcome = AggregatedSearch(results=_interleave(sources, merged)[:limit], errors=errors)
+    if not errors:
+        # Provider failures are transient (429/503): never memoise a partial result.
+        # Store a copy so callers mutating their result cannot poison the cache.
+        _CACHE.set(cache_key, outcome.model_copy(deep=True))
+    return outcome

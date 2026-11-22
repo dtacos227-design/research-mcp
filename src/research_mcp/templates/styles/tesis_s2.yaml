@@ -25,6 +25,7 @@ formatting:
   heading_numbering: roman_bab
   page_number_position: footer_center
   page_number_format: lowerRoman
+  front_matter_page_number_format: lowerRoman
   two_column: false
 outline:
   - id: cover

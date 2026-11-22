@@ -220,7 +220,11 @@ def _set_columns(section, count: int) -> None:
     columns.set(qn("w:space"), "720")
 
 
-def apply_docx_formatting(path: Path, fmt: FormattingSpec) -> None:
+def apply_docx_formatting(
+    path: Path,
+    fmt: FormattingSpec,
+    body_start_heading: str | None = None,
+) -> None:
     """Apply paper size, margins, typography, numbering and columns to a `.docx`.
 
     Pandoc's ``--reference-doc`` does not carry page margins reliably, so the
@@ -269,7 +273,104 @@ def apply_docx_formatting(path: Path, fmt: FormattingSpec) -> None:
             except KeyError:
                 continue
             heading.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    if fmt.heading_numbering == "roman_bab":
+        _uppercase_chapter_headings(document)
+    if fmt.front_matter_page_number_format and body_start_heading:
+        _split_front_matter(document, body_start_heading, fmt.front_matter_page_number_format)
+    _request_toc_update(document)
     document.save(str(path))
+
+
+def _uppercase_chapter_headings(document) -> None:
+    """`BAB I Pendahuluan` -> `BAB I PENDAHULUAN`, the Indonesian thesis convention."""
+    for paragraph in document.paragraphs:
+        if paragraph.style.name != "Heading 1":
+            continue
+        text = paragraph.text.strip()
+        if text.upper().startswith("BAB ") and not text.isupper():
+            paragraph.text = text.upper()
+
+
+def _set_section_page_numbers(section, number_format: str, start: int) -> None:
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    sect_pr = section._sectPr
+    existing = sect_pr.find(qn("w:pgNumType"))
+    if existing is not None:
+        sect_pr.remove(existing)
+    pg_num_type = OxmlElement("w:pgNumType")
+    pg_num_type.set(qn("w:fmt"), number_format)
+    pg_num_type.set(qn("w:start"), str(start))
+    sect_pr.insert_element_before(
+        pg_num_type,
+        "w:cols",
+        "w:formProt",
+        "w:vAlign",
+        "w:noEndnote",
+        "w:titlePg",
+        "w:textDirection",
+        "w:bidi",
+        "w:rtlGutter",
+        "w:docGrid",
+        "w:printerSettings",
+        "w:sectPrChange",
+    )
+
+
+def _split_front_matter(document, heading_text: str, front_format: str) -> bool:
+    """Start the body on its own section so front matter keeps Roman numerals.
+
+    Returns True when the split happened. The body section restarts at 1 with
+    decimal numbering, which is the Indonesian thesis convention.
+    """
+    from copy import deepcopy
+
+    from docx.oxml import OxmlElement
+
+    target = None
+    wanted = heading_text.strip().casefold()
+    for paragraph in document.paragraphs:
+        if paragraph.style.name != "Heading 1":
+            continue
+        if paragraph.text.strip().casefold().startswith(wanted):
+            target = paragraph
+            break
+    if target is None:
+        return False
+
+    front = deepcopy(document.sections[-1]._sectPr)
+    holder = OxmlElement("w:p")
+    holder_p_pr = OxmlElement("w:pPr")
+    holder_p_pr.append(front)
+    holder.append(holder_p_pr)
+    target._element.addprevious(holder)
+    target.paragraph_format.page_break_before = False
+
+    sections = document.sections
+    if len(sections) < 2:
+        return False
+    _set_section_page_numbers(sections[0], front_format, 1)
+    _set_section_page_numbers(sections[1], "decimal", 1)
+    return True
+
+
+def _request_toc_update(document) -> None:
+    """Ask Word to refresh a TOC field on open so the list is never stale."""
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    has_toc = any(
+        "TOC" in (node.text or "") for node in document.element.body.iter(qn("w:instrText"))
+    )
+    if not has_toc:
+        return
+    settings = document.settings.element
+    if settings.find(qn("w:updateFields")) is not None:
+        return
+    update = OxmlElement("w:updateFields")
+    update.set(qn("w:val"), "true")
+    settings.append(update)
 
 
 def _format_cm(value_cm: float) -> str:

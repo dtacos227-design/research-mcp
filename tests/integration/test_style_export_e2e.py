@@ -107,7 +107,7 @@ async def test_skripsi_style_export_end_to_end(tmp_path, monkeypatch):
     assert "guidance:" not in body_text
     assert "<!--" not in body_text
     # The cited chapter survived the skeleton merge and Citeproc resolved it.
-    assert "Pendahuluan" in body_text
+    assert "BAB I PENDAHULUAN" in body_text
     assert "[@" not in body_text
     assert "Doe" in body_text
     # The TOC chapter is generated, never merged as an empty heading.
@@ -124,8 +124,12 @@ async def test_skripsi_style_export_end_to_end(tmp_path, monkeypatch):
         "BAB V Kesimpulan dan Saran",
     ]
     for heading in front_matter + chapters:
-        assert heading in body_text, f"{heading!r} missing from the exported document"
+        # `heading_numbering: roman_bab` uppercases every BAB heading.
+        assert heading.upper() in body_text.upper(), (
+            f"{heading!r} missing from the exported document"
+        )
 
-    positions = [body_text.index(heading) for heading in front_matter + chapters]
+    search_text = body_text.upper()
+    positions = [search_text.index(heading.upper()) for heading in front_matter + chapters]
     assert positions == sorted(positions), "chapters are not in skripsi_s1 outline order"
-    assert body_text.index("Sampul") < body_text.index("BAB I Pendahuluan")
+    assert search_text.index("SAMPUL") < search_text.index("BAB I PENDAHULUAN")

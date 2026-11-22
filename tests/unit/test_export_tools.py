@@ -175,7 +175,7 @@ async def test_docx_export_writes_docx_and_refreshes_bibliography(project_with_d
     monkeypatch.setattr(
         server,
         "apply_docx_formatting",
-        lambda path, fmt: formatted.append((path, fmt)),
+        lambda path, fmt, **kwargs: formatted.append((path, fmt)),
     )
 
     result = await export_to_docx(project.id, "thesis")
@@ -210,7 +210,7 @@ async def test_non_strict_export_reports_missing_citekeys(project_with_drafts, m
 
     monkeypatch.setattr(server, "render_docx", _fake_render_engine(recorded))
     monkeypatch.setattr(server, "polish_docx", lambda path, title: None)
-    monkeypatch.setattr(server, "apply_docx_formatting", lambda path, fmt: None)
+    monkeypatch.setattr(server, "apply_docx_formatting", lambda path, fmt, **kwargs: None)
 
     result = await export_to_docx(project.id, "thesis", strict_citations=False)
 

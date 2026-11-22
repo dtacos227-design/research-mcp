@@ -340,13 +340,20 @@ async def start_research(project_id: str, overwrite: bool = False) -> dict:
 @mcp.tool()
 async def search_papers(
     query: str,
-    sources: list[str] = ["openalex", "semantic_scholar", "arxiv"],  # noqa: B006
+    sources: list[str] | None = None,
     year_from: int | None = None,
     year_to: int | None = None,
     limit: int = 10,
 ) -> dict:
     """Search multiple literature sources in parallel, deduplicated by DOI/title."""
-    outcome = await search_all(query, sources, year_from, year_to, limit)
+    resolved_sources = sources or [
+        "openalex",
+        "semantic_scholar",
+        "arxiv",
+        "crossref",
+        "pubmed",
+    ]
+    outcome = await search_all(query, resolved_sources, year_from, year_to, limit)
     results = []
     for r in outcome.results:
         item = r.model_dump()
@@ -1146,7 +1153,15 @@ async def _render_docx_export(
             toc=toc,
             reference_section_title=style.bibliography_title,
         )
-    apply_docx_formatting(output, style.formatting)
+    body_sections = sorted(
+        (section for section in style.outline if section.kind == "body"),
+        key=lambda section: section.order,
+    )
+    apply_docx_formatting(
+        output,
+        style.formatting,
+        body_start_heading=body_sections[0].title if body_sections else None,
+    )
     if polish:
         polish_docx(output, project.name)
     return output, missing, extra_files

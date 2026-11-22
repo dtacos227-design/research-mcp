@@ -2,6 +2,7 @@
 
 import pytest
 
+from research_mcp.providers.aggregator import clear_search_cache
 from research_mcp.styles import registry
 
 
@@ -21,3 +22,11 @@ def _hermetic_styles_dir(tmp_path, monkeypatch):
     # so the eager reload below cannot fail during teardown.
     monkeypatch.setenv(registry.USER_STYLES_DIR_ENV, str(styles_dir))
     registry.reload_styles()
+
+
+@pytest.fixture(autouse=True)
+def _empty_search_cache():
+    """The provider search cache is process-global; keep tests independent."""
+    clear_search_cache()
+    yield
+    clear_search_cache()

@@ -51,6 +51,7 @@ class FormattingSpec(BaseModel):
         "footer_center"
     )
     page_number_format: Literal["decimal", "lowerRoman", "upperRoman"] = "decimal"
+    front_matter_page_number_format: Literal["decimal", "lowerRoman", "upperRoman"] | None = None
     two_column: bool = False
 
     @field_validator("margin_cm")
