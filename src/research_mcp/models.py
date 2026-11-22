@@ -79,3 +79,30 @@ class ExportResult(BaseModel):
     output_path: str | None = None
     warnings: list[str] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
+
+
+BriefLanguage = Literal["id", "en", "bilingual"]
+
+BRIEF_REQUIRED_FIELDS: tuple[str, ...] = (
+    "style_id",
+    "title",
+    "research_question",
+    "citation",
+)
+
+
+class ResearchBrief(BaseModel):
+    style_id: str | None = None
+    title: str | None = None
+    research_question: str | None = None
+    citation: str | None = None
+    language: BriefLanguage = "id"
+    scope: str = ""
+    target_length: str = ""
+    deadline: str = ""
+
+    def missing(self) -> list[str]:
+        return [field for field in BRIEF_REQUIRED_FIELDS if not getattr(self, field)]
+
+    def complete(self) -> bool:
+        return not self.missing()
