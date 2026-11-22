@@ -8,6 +8,7 @@ class ProjectModel(BaseModel):
     slug: str
     name: str
     description: str = ""
+    style_id: str | None = None
     created_at: str
     updated_at: str
 
