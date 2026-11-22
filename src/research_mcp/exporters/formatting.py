@@ -72,17 +72,23 @@ def wordcraft_style_steps(fmt: FormattingSpec) -> list[dict]:
         )
     ]
     for level, size, space_before, space_after in _HEADING_FORMATS:
+        # Heading styles are based on Normal and carry no own alignment, so a
+        # justified Normal would stretch wrapped chapter headings. Pin them left
+        # there too, mirroring the DOCX fix in `apply_docx_formatting`.
+        heading_para: dict = {
+            "spaceBefore": space_before,
+            "spaceAfter": space_after,
+            "keepNext": True,
+        }
+        if fmt.justify:
+            heading_para["align"] = "left"
         steps.append(
             _execute(
                 "styles.modify",
                 {
                     "style": f"Heading {level}",
                     "chr": {"font": fmt.font_family, "size": size, "bold": True},
-                    "para": {
-                        "spaceBefore": space_before,
-                        "spaceAfter": space_after,
-                        "keepNext": True,
-                    },
+                    "para": heading_para,
                 },
             )
         )

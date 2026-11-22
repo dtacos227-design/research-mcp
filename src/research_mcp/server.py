@@ -1372,7 +1372,7 @@ silently drops citations.
 
 The result carries `tool_sequence`, a list of WordCraft calls. Execute them in order:
 
-- `new_document` → `file.setAuthor` → `styles.modify` (Normal, Heading1–3) →
+- `new_document` → `file.setAuthor` → `styles.modify` (Normal, Heading 1–3) →
   `references.citationStyle` → content blocks (type_text / insert_table / insert.picture) →
   bibliography text → `caret.docEnd` → `file.strictReport` → `render_page` → `save_document`
   `.docx` → `file.exportPdf` strict.
