@@ -15,7 +15,9 @@ from research_mcp.db import repository
 from research_mcp.db.database import get_connection
 from research_mcp.exporters import latex_engine, wordcraft_bridge
 from research_mcp.exporters.docx_polisher import polish_docx
+from research_mcp.exporters.formatting import apply_docx_formatting, normalize_chapter_markdown
 from research_mcp.exporters.pandoc_engine import (
+    _read_draft,
     detect_pandoc,
     merge_draft_markdown,
     render_docx,
@@ -647,6 +649,76 @@ async def _resolve_style_for_export(conn, project_id: str, style: str | None) ->
     return get_style(requested)
 
 
+async def _precondition_failed(conn, project_id: str, style: StyleSpec) -> dict | None:
+    """Return the failed export preconditions, or `None` when the project is ready.
+
+    The gate enforces the intake contract before any file is written: a complete
+    research brief and at least one saved paper. Style resolution happens before
+    this helper, so an unknown style already failed with its own `ToolError`.
+    Citation verification intentionally stays in `_citation_gate`, which honors
+    `strict_citations` during rendering (R11).
+    """
+    stored = await repository.get_project_brief(conn, project_id)
+    brief = ResearchBrief.model_validate(stored or {})
+    missing = brief.missing()
+
+    failed: list[str] = []
+    remediation: list[str] = []
+    if missing:
+        failed.append(f"brief: missing required fields {missing}")
+        remediation.append(
+            "Answer the research brief with save_research_brief(project_id="
+            f"{project_id!r}, style_id={style.id!r}, title=..., research_question=..., "
+            "citation=...) and export again."
+        )
+    if not await repository.list_papers(conn, project_id):
+        failed.append("papers: no paper saved")
+        remediation.append(
+            "Save at least one paper with save_paper_to_project or import_local_pdf so "
+            "the bibliography and citation gate have a source."
+        )
+    if not failed:
+        return None
+    return {
+        "status": "precondition_failed",
+        "failed": failed,
+        "remediation": remediation,
+    }
+
+
+def _style_merge_markdown(
+    project_dir: Path, sections: list[dict], style: StyleSpec
+) -> tuple[str, list[str]]:
+    """Merge drafts for a style, returning the markdown and unmatched filenames.
+
+    R10: chapters named by the style outline come first in `order` with their
+    leading heading normalized to the outline title; every other `drafts/*.md`
+    is appended afterwards in filename order, unchanged, and reported as an
+    extra so the user learns it is outside the chosen structure.
+    """
+    drafts_dir = project_dir / "drafts"
+    pieces: list[str] = []
+    outline_names: set[str] = set()
+
+    for section in sorted(style.outline, key=lambda item: item.order):
+        outline_names.add(section.filename)
+        text = _read_draft(drafts_dir / section.filename)
+        if text:
+            pieces.append(normalize_chapter_markdown(text, section))
+
+    extra_files: list[str] = []
+    if drafts_dir.is_dir():
+        for path in sorted(drafts_dir.glob("*.md")):
+            if path.name in outline_names:
+                continue
+            text = _read_draft(path)
+            if text:
+                extra_files.append(path.name)
+                pieces.append(text)
+
+    return "\n\n".join(pieces), extra_files
+
+
 def _skeleton_markdown(section: SectionSpec) -> str:
     return f"# {section.title}\n\n<!-- guidance: {section.guidance} -->\n"
 
@@ -715,14 +787,16 @@ async def _render_docx_export(
     template_name: str,
     polish: bool,
     strict_citations: bool,
-) -> tuple[Path, list[str]]:
+    style: StyleSpec,
+) -> tuple[Path, list[str], list[str]]:
     """Render the merged draft to `exports/<output_name>.docx` behind the citation gate."""
     output = _export_target(project_dir, output_name, ".docx")
     csl_name = resolve_csl(csl_style)
     docx_name = resolve_docx_template(template_name)
 
     sections = await repository.list_draft_sections(conn, project.id)
-    markdown = _draft_markdown_or_raise(merge_draft_markdown(project_dir, sections))
+    markdown, extra_files = _style_merge_markdown(project_dir, sections, style)
+    markdown = _draft_markdown_or_raise(markdown)
     missing = await _citation_gate(conn, project.id, markdown, strict_citations)
     bib_path, _csl_json = await _refresh_bibliography(conn, project.id, project_dir)
 
@@ -738,15 +812,22 @@ async def _render_docx_export(
             output,
             resource_path=project_dir,
         )
+    apply_docx_formatting(output, style.formatting)
     if polish:
         polish_docx(output, project.name)
-    return output, missing
+    return output, missing, extra_files
 
 
 def _warnings_for_missing(missing: list[str]) -> list[str]:
     if not missing:
         return []
     return [f"Undefined citekey(s) left unresolved by Citeproc: {', '.join(missing)}."]
+
+
+def _warnings_for_extra_drafts(extra_files: list[str]) -> list[str]:
+    if not extra_files:
+        return []
+    return [f"Exported draft(s) not in the style outline: {', '.join(extra_files)}"]
 
 
 @mcp.tool()
@@ -861,40 +942,56 @@ async def verify_citations(project_id: str, markdown_text: str | None = None) ->
 async def export_to_docx(
     project_id: str,
     output_name: str,
-    csl_style: str = "apa",
+    csl_style: str | None = None,
     template_name: str = "default_academic",
     polish: bool = True,
     strict_citations: bool = True,
+    style: str | None = None,
 ) -> dict:
     """Export every draft chapter to one `.docx` via Pandoc + Citeproc.
 
     Regenerates references.bib/references.csl.json from the project library,
-    merges the draft chapters in section order, verifies every `[@citekey]`
-    against that library, then converts. Writes to `exports/<output_name>.docx`.
+    merges the draft chapters in the resolved style's section order, verifies
+    every `[@citekey]` against that library, then converts and applies the
+    style's page/typography formatting. Writes `exports/<output_name>.docx`.
+
+    The export refuses to run until the research brief is complete and at least
+    one paper is saved, returning `precondition_failed` with remediation steps.
     """
     try:
         settings = get_settings()
         conn = await get_connection(settings.db_path)
         try:
             project = await _get_project_or_raise(conn, project_id)
+            resolved_style = await _resolve_style_for_export(conn, project_id, style)
+            blocked = await _precondition_failed(conn, project_id, resolved_style)
+            if blocked is not None:
+                return blocked
+
             project_dir = _project_dir(settings, project)
-            output, missing = await _render_docx_export(
+            effective_csl = csl_style or resolved_style.citation
+            output, missing, extra_files = await _render_docx_export(
                 conn,
                 project,
                 project_dir,
                 output_name,
-                csl_style,
+                effective_csl,
                 template_name,
                 polish,
                 strict_citations,
+                resolved_style,
             )
             return {
                 "output_path": str(output),
                 "format": "docx",
-                "csl_style": csl_style,
+                "style_id": resolved_style.id,
+                "csl_style": effective_csl,
                 "template_name": template_name,
                 "cited_but_missing": missing,
-                "warnings": _warnings_for_missing(missing),
+                "warnings": [
+                    *_warnings_for_missing(missing),
+                    *_warnings_for_extra_drafts(extra_files),
+                ],
             }
         finally:
             await conn.close()
@@ -1234,7 +1331,8 @@ async def prepare_wordcraft_handoff(
                 )
                 return result
 
-            seed_docx, missing = await _render_docx_export(
+            resolved_style = await _resolve_style_for_export(conn, project_id, None)
+            seed_docx, missing, _extra_files = await _render_docx_export(
                 conn,
                 project,
                 project_dir,
@@ -1243,6 +1341,7 @@ async def prepare_wordcraft_handoff(
                 "default_academic",
                 True,
                 strict_citations,
+                resolved_style,
             )
             result["seed_docx_path"] = str(seed_docx)
             result["cited_but_missing"] = missing

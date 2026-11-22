@@ -84,6 +84,12 @@ def _skip_polish(monkeypatch):
     monkeypatch.setattr(server, "polish_docx", lambda *args, **kwargs: None)
 
 
+def _skip_docx_formatting(monkeypatch):
+    from research_mcp import server
+
+    monkeypatch.setattr(server, "apply_docx_formatting", lambda *args, **kwargs: None)
+
+
 def _fake_docx_renderer(recorded, payload=b"docx"):
     def fake(markdown, bib_path, csl_path, reference_doc, output, resource_path=None):
         recorded.append({"markdown": markdown, "output": output})
@@ -205,6 +211,7 @@ async def test_seed_docx_writes_docx(project_with_drafts, monkeypatch):
     recorded = []
     monkeypatch.setattr(server, "render_docx", _fake_docx_renderer(recorded))
     _skip_polish(monkeypatch)
+    _skip_docx_formatting(monkeypatch)
 
     result = await prepare_wordcraft_handoff(project.id, mode="seed_docx")
 
@@ -223,6 +230,7 @@ async def test_batch_script_writes_job_json(project_with_drafts, monkeypatch):
     project, project_dir = project_with_drafts
     monkeypatch.setattr(server, "render_docx", _fake_docx_renderer([]))
     _skip_polish(monkeypatch)
+    _skip_docx_formatting(monkeypatch)
     monkeypatch.setattr(server.wordcraft_bridge, "detect_wordcraft_cli", lambda *a, **k: None)
 
     result = await prepare_wordcraft_handoff(project.id, mode="batch_script")
@@ -245,6 +253,7 @@ async def test_batch_script_uses_detected_cli(project_with_drafts, monkeypatch):
     project, _project_dir = project_with_drafts
     monkeypatch.setattr(server, "render_docx", _fake_docx_renderer([]))
     _skip_polish(monkeypatch)
+    _skip_docx_formatting(monkeypatch)
     monkeypatch.setattr(
         server.wordcraft_bridge, "detect_wordcraft_cli", lambda *a, **k: Path("/x/wordcraft-cli")
     )
