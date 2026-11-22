@@ -96,3 +96,27 @@ class StyleSpec(BaseModel):
             names = ", ".join(repr(name) for name in duplicates)
             raise ValueError(f"outline filenames must be unique; duplicate filename(s): {names}")
         return self
+
+
+_TOC_MARKERS = ("daftarisi", "tableofcontents", "contents")
+
+
+def outline_key(text: str) -> str:
+    """Loose matching key: lowercase letters and digits only."""
+    return re.sub(r"[^a-z0-9]+", "", text.casefold())
+
+
+def is_toc_text(text: str) -> bool:
+    """True when a heading/id names a table of contents ("Daftar Isi", "Contents")."""
+    key = outline_key(text)
+    return any(marker in key for marker in _TOC_MARKERS)
+
+
+def is_toc_section(section: SectionSpec) -> bool:
+    """True when an outline section stands for an auto-generated table of contents."""
+    return is_toc_text(section.title) or is_toc_text(section.id)
+
+
+def style_toc_section(style: StyleSpec) -> SectionSpec | None:
+    """The style's table-of-contents section, if it declares one."""
+    return next((section for section in style.outline if is_toc_section(section)), None)

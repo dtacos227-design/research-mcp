@@ -19,7 +19,12 @@ from pathlib import Path
 from mcp.server.mcpserver.exceptions import ToolError
 
 from research_mcp.exporters import formatting
-from research_mcp.styles.models import FormattingSpec, StyleSpec
+from research_mcp.styles.models import (
+    FormattingSpec,
+    StyleSpec,
+    is_toc_text,
+    style_toc_section,
+)
 
 DEFAULT_PORT = 7981
 WORDCRAFT_AUTHOR = "Research Agent"
@@ -446,24 +451,8 @@ def _style_warnings(style: StyleSpec) -> list[str]:
     ]
 
 
-_TOC_MARKERS = ("daftarisi", "tableofcontents", "contents")
-
-
-def _outline_key(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "", text.casefold())
-
-
-def _is_toc_heading(text: str) -> bool:
-    key = _outline_key(text)
-    return any(marker in key for marker in _TOC_MARKERS)
-
-
 def _style_has_toc(style: StyleSpec | None) -> bool:
-    if style is None:
-        return False
-    return any(
-        _is_toc_heading(section.title) or _is_toc_heading(section.id) for section in style.outline
-    )
+    return style is not None and style_toc_section(style) is not None
 
 
 def _insert_toc(blocks: list[dict], style: StyleSpec | None) -> list[dict]:
@@ -480,7 +469,7 @@ def _insert_toc(blocks: list[dict], style: StyleSpec | None) -> list[dict]:
     skipping = False
     for block in blocks:
         if block["kind"] == "heading":
-            if _is_toc_heading(block["text"]):
+            if is_toc_text(block["text"]):
                 result.append({"kind": "toc", "title": block["text"]})
                 skipping = True
                 continue

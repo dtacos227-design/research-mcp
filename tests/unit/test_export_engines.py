@@ -11,7 +11,6 @@ from research_mcp.exporters.pandoc_engine import (
     detect_pandoc,
     merge_draft_markdown,
     render_docx,
-    render_markdown,
 )
 
 
@@ -99,26 +98,6 @@ def test_render_docx_adds_toc_when_requested(tmp_path, monkeypatch):
         tmp_path / "apa.csl",
         tmp_path / "reference.docx",
         tmp_path / "out.docx",
-        toc=True,
-    )
-
-    assert "--toc" in calls[0]
-
-
-def test_render_markdown_adds_toc_when_requested(tmp_path, monkeypatch):
-    calls = []
-
-    def fake_run_pandoc(args, input_text=None):
-        calls.append(args)
-
-    monkeypatch.setattr(pandoc_engine, "run_pandoc", fake_run_pandoc)
-    monkeypatch.setattr(pandoc_engine, "detect_pandoc", lambda: "pandoc")
-
-    render_markdown(
-        "body",
-        tmp_path / "references.bib",
-        tmp_path / "apa.csl",
-        tmp_path / "out.md",
         toc=True,
     )
 

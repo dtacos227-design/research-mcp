@@ -42,7 +42,12 @@ from research_mcp.providers.aggregator import search_all
 from research_mcp.providers.crossref import get_bibtex, get_by_doi
 from research_mcp.providers.semantic_scholar import get_citations, get_references
 from research_mcp.providers.unpaywall import get_oa_location
-from research_mcp.styles.models import SectionSpec, StyleSpec
+from research_mcp.styles.models import (
+    SectionSpec,
+    StyleSpec,
+    is_toc_section,
+    style_toc_section,
+)
 from research_mcp.styles.registry import get_style, list_styles
 from research_mcp.writers import draft_manager
 from research_mcp.writers.chart_runner import run_chart
@@ -734,23 +739,6 @@ async def _precondition_failed(conn, project_id: str, style: StyleSpec) -> dict 
     }
 
 
-_TOC_MARKERS = ("daftarisi", "tableofcontents", "contents")
-
-
-def _outline_key(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "", text.casefold())
-
-
-def _is_toc_section(section: SectionSpec) -> bool:
-    """True for outline sections that stand for an auto-generated table of contents."""
-    keys = (_outline_key(section.title), _outline_key(section.id))
-    return any(marker in key for key in keys for marker in _TOC_MARKERS)
-
-
-def _style_toc_section(style: StyleSpec) -> SectionSpec | None:
-    return next((section for section in style.outline if _is_toc_section(section)), None)
-
-
 def _is_bibliography_section(section: SectionSpec) -> bool:
     """True for outline sections that name the reference list.
 
@@ -763,7 +751,11 @@ def _is_bibliography_section(section: SectionSpec) -> bool:
 
 
 def _style_merge_markdown(
-    project_dir: Path, sections: list[dict], style: StyleSpec
+    project_dir: Path,
+    sections: list[dict],
+    style: StyleSpec,
+    *,
+    skip_toc: bool = False,
 ) -> tuple[str, list[str]]:
     """Merge drafts for a style, returning the markdown and unmatched filenames.
 
@@ -772,6 +764,11 @@ def _style_merge_markdown(
     is appended afterwards in filename order, unchanged, and reported as an
     extra so the user learns it is outside the chosen structure. Outline
     sections that name the reference list are skipped: Citeproc owns that list.
+    With `skip_toc`, the style's table-of-contents chapter is skipped too, so an
+    exporter that emits a generated TOC (`--toc` / `references.toc`) does not
+    also merge the empty "Daftar Isi" skeleton heading. The live WordCraft
+    handoff keeps it because `build_blueprint` uses that heading as the
+    insertion point for `references.toc`.
     """
     drafts_dir = project_dir / "drafts"
     pieces: list[str] = []
@@ -780,6 +777,8 @@ def _style_merge_markdown(
     for section in sorted(style.outline, key=lambda item: item.order):
         outline_names.add(section.filename)
         if _is_bibliography_section(section):
+            continue
+        if skip_toc and is_toc_section(section):
             continue
         text = _read_draft(drafts_dir / section.filename)
         if text:
@@ -875,7 +874,11 @@ async def _render_docx_export(
     docx_name = resolve_docx_template(template_name)
 
     sections = await repository.list_draft_sections(conn, project.id)
-    markdown, extra_files = _style_merge_markdown(project_dir, sections, style)
+    # Both DOCX paths end up with a generated TOC: `--toc` for export_to_docx,
+    # `references.toc` in the seed handoff's polish sequence.
+    markdown, extra_files = _style_merge_markdown(
+        project_dir, sections, style, skip_toc=style_toc_section(style) is not None
+    )
     markdown = _draft_markdown_or_raise(markdown)
     missing = await _citation_gate(conn, project.id, markdown, strict_citations)
     bib_path, _csl_json = await _refresh_bibliography(conn, project.id, project_dir)
@@ -942,6 +945,16 @@ def _warnings_for_two_column(style: StyleSpec, latex_name: str) -> list[str]:
         f"template {latex_name!r} is single-column; the PDF is rendered in one column. "
         "Re-export with export_to_docx (DOCX columns are applied via python-docx) or "
         "open the document in WordCraft for a two-column layout."
+    ]
+
+
+def _warnings_for_markdown_toc(style: StyleSpec) -> list[str]:
+    """Markdown output has no generated TOC; say so instead of dropping it silently."""
+    if style_toc_section(style) is None:
+        return []
+    return [
+        f"Style {style.id!r} declares a table of contents, but the Markdown bundle does "
+        "not include a generated TOC; export to DOCX or LaTeX for the rendered TOC."
     ]
 
 
@@ -1106,7 +1119,7 @@ async def export_to_docx(
                 polish,
                 strict_citations,
                 resolved_style,
-                toc=_style_toc_section(resolved_style) is not None,
+                toc=style_toc_section(resolved_style) is not None,
             )
             return {
                 "output_path": str(output),
@@ -1170,7 +1183,10 @@ async def export_to_latex(
             csl_name = "ieee" if latex_name == "ieee" else resolve_csl(resolved_style.citation)
 
             sections = await repository.list_draft_sections(conn, project_id)
-            markdown, extra_files = _style_merge_markdown(project_dir, sections, resolved_style)
+            toc = style_toc_section(resolved_style) is not None
+            markdown, extra_files = _style_merge_markdown(
+                project_dir, sections, resolved_style, skip_toc=toc
+            )
             markdown = _draft_markdown_or_raise(markdown)
             missing = await _citation_gate(conn, project_id, markdown, strict_citations)
             bib_path, _csl_json = await _refresh_bibliography(conn, project_id, project_dir)
@@ -1187,7 +1203,7 @@ async def export_to_latex(
                     tex_path,
                     resource_path=project_dir,
                     metadata=latex_metadata(resolved_style.formatting),
-                    toc=_style_toc_section(resolved_style) is not None,
+                    toc=toc,
                 )
 
             pdf_path: Path | None = None
@@ -1254,20 +1270,16 @@ async def export_to_markdown_bundle(
             csl_name = resolve_csl(effective_csl)
 
             sections = await repository.list_draft_sections(conn, project_id)
-            markdown, extra_files = _style_merge_markdown(project_dir, sections, resolved_style)
+            has_toc = style_toc_section(resolved_style) is not None
+            markdown, extra_files = _style_merge_markdown(
+                project_dir, sections, resolved_style, skip_toc=has_toc
+            )
             markdown = _draft_markdown_or_raise(markdown)
             missing = await _citation_gate(conn, project_id, markdown, strict_citations)
             bib_path, _csl_json = await _refresh_bibliography(conn, project_id, project_dir)
 
             with bundled_template(f"csl/{csl_name}.csl") as csl_path:
-                render_markdown(
-                    markdown,
-                    bib_path,
-                    csl_path,
-                    output,
-                    resource_path=project_dir,
-                    toc=_style_toc_section(resolved_style) is not None,
-                )
+                render_markdown(markdown, bib_path, csl_path, output, resource_path=project_dir)
 
             return {
                 "output_path": str(output),
@@ -1278,6 +1290,7 @@ async def export_to_markdown_bundle(
                 "warnings": [
                     *_warnings_for_missing(missing),
                     *_warnings_for_extra_drafts(extra_files),
+                    *_warnings_for_markdown_toc(resolved_style),
                 ],
             }
         finally:
@@ -1913,7 +1926,7 @@ outline is:
 6. `save_draft_section(project_id, "05_conclusion.md", content, order=6)`
 7. `06_references.md` — do NOT type reference entries by hand: Pandoc Citeproc
    appends the final reference list from the project bibliography, and the
-   exporter skips this skeleton's empty heading.`
+   exporter skips this skeleton's empty heading.
 
 ## Step 5 — Verify and export
 
@@ -1998,18 +2011,19 @@ least one paper is saved — fix that with `save_research_brief` first.
 If not already present, create each section with `save_draft_section`. The filenames
 and order come from the project style's `outline`; the IMRaD example is:
 
-- `save_draft_section({project_id!r}, "00_abstract.md", content, order=0)`
+- `save_draft_section({project_id!r}, "00_abstract.md", content, order=1)`
   — 150–250 words.
-- `save_draft_section({project_id!r}, "01_introduction.md", content, order=1)`
+- `save_draft_section({project_id!r}, "01_introduction.md", content, order=2)`
   — Introduction: motivate the problem, state contributions, cite `[@citekey]`.
-- `save_draft_section({project_id!r}, "02_methods.md", content, order=2)`
+- `save_draft_section({project_id!r}, "02_methods.md", content, order=3)`
   — Methods: dataset, model, algorithm.
-- `save_draft_section({project_id!r}, "03_results.md", content, order=3)`
+- `save_draft_section({project_id!r}, "03_results.md", content, order=4)`
   — Results: quantitative findings; use `generate_chart` for figures.
-- `save_draft_section({project_id!r}, "04_discussion.md", content, order=4)`
+- `save_draft_section({project_id!r}, "04_discussion.md", content, order=5)`
   — Discussion: interpret results, limitations.
-- `save_draft_section({project_id!r}, "05_conclusion.md", content, order=5)`
+- `save_draft_section({project_id!r}, "05_conclusion.md", content, order=6)`
   — Conclusion.
+- `06_references.md`, order=7 — generated by Citeproc; never type entries by hand.
 
 ## Step 3 — Verify citations
 

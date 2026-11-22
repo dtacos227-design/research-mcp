@@ -90,6 +90,11 @@ async def test_skripsi_style_export_end_to_end(tmp_path, monkeypatch):
     from docx import Document
 
     doc = Document(str(docx_path))
+    document_xml = doc.element.xml
+    # Pandoc's generated TOC is a Word field inside a "Table of Contents" content
+    # control. There must be exactly one, and the empty "Daftar Isi" skeleton
+    # heading must NOT be merged next to it.
+    assert document_xml.count('w:docPartGallery w:val="Table of Contents"') == 1
     section = doc.sections[0]
     assert round(section.left_margin.cm, 1) == 4.0
     assert round(section.top_margin.cm, 1) == 3.0
@@ -105,10 +110,12 @@ async def test_skripsi_style_export_end_to_end(tmp_path, monkeypatch):
     assert "Pendahuluan" in body_text
     assert "[@" not in body_text
     assert "Doe" in body_text
+    # The TOC chapter is generated, never merged as an empty heading.
+    assert "Daftar Isi" not in body_text
 
     # Front matter precedes the body, and both follow the skripsi_s1 outline order
     # (registry titles, as the skeleton headings written by start_research).
-    front_matter = ["Sampul", "Lembar Pengesahan", "Abstrak", "Kata Pengantar", "Daftar Isi"]
+    front_matter = ["Sampul", "Lembar Pengesahan", "Abstrak", "Kata Pengantar"]
     chapters = [
         "BAB I Pendahuluan",
         "BAB II Tinjauan Pustaka",
@@ -122,4 +129,3 @@ async def test_skripsi_style_export_end_to_end(tmp_path, monkeypatch):
     positions = [body_text.index(heading) for heading in front_matter + chapters]
     assert positions == sorted(positions), "chapters are not in skripsi_s1 outline order"
     assert body_text.index("Sampul") < body_text.index("BAB I Pendahuluan")
-    assert body_text.index("Daftar Isi") < body_text.index("BAB I Pendahuluan")

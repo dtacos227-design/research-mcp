@@ -92,7 +92,6 @@ def render_markdown(
     csl_path: Path,
     output: Path,
     resource_path: Path | None = None,
-    toc: bool = False,
 ) -> Path:
     """Render merged Markdown through Citeproc and write a self-contained `.md`."""
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -104,7 +103,6 @@ def render_markdown(
         "--to",
         "markdown",
         "--citeproc",
-        *_toc_args(toc),
         "--metadata",
         "reference-section-title=References",
         "--bibliography",

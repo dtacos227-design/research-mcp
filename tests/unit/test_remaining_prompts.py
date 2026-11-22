@@ -55,6 +55,25 @@ def test_slr_prompt_carries_project_id():
     assert "2019" in text
 
 
+def test_slr_prompt_has_no_stray_backtick_after_the_references_note():
+    text = server.systematic_literature_review("machine learning", 2020)
+    assert "empty heading.`" not in text
+
+
+def test_latex_prompt_uses_the_article_imrad_orders():
+    text = server.draft_latex_paper("proj-3", "ieee")
+    for filename, order in [
+        ("00_abstract.md", 1),
+        ("01_introduction.md", 2),
+        ("02_methods.md", 3),
+        ("03_results.md", 4),
+        ("04_discussion.md", 5),
+        ("05_conclusion.md", 6),
+    ]:
+        assert f'"{filename}", content, order={order}' in text
+    assert "06_references.md" in text
+
+
 def test_latex_prompt_contains_workflow_steps():
     text = server.draft_latex_paper("proj-1", "ieee")
     for needle in [
