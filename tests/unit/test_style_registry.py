@@ -1,4 +1,5 @@
 import textwrap
+from pathlib import Path
 
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
@@ -14,9 +15,16 @@ def _write_style(tmp_path, name, body):
 
 
 @pytest.fixture(autouse=True)
-def _reset_registry_cache():
-    """Keep the module-level cache from leaking between tests."""
+def _isolated_styles_dir(tmp_path, monkeypatch):
+    """Point the registry at an empty per-test dir so no developer config leaks in."""
+    user_dir = tmp_path / "user_styles"
+    user_dir.mkdir()
+    monkeypatch.setenv(registry.USER_STYLES_DIR_ENV, str(user_dir))
+    registry.reload_styles()
     yield
+    # Restore the isolated dir (a test may have pointed the env at a bad path)
+    # so the eager reload below cannot fail during teardown.
+    monkeypatch.setenv(registry.USER_STYLES_DIR_ENV, str(user_dir))
     registry.reload_styles()
 
 
@@ -73,6 +81,12 @@ def test_list_styles_summarizes_bundled_styles():
     assert entry["sections"][0]["filename"]
 
 
+def test_registry_reads_isolated_user_styles_dir(tmp_path):
+    # The autouse fixture must keep the suite away from ~/.research-mcp/styles.
+    assert registry._user_styles_dir() == (tmp_path / "user_styles").resolve()
+    assert registry.get_style("article_imrad").id == "article_imrad"
+
+
 def test_invalid_yaml_error_names_the_file(tmp_path, monkeypatch):
     d = tmp_path / "styles"
     d.mkdir()
@@ -101,6 +115,23 @@ def test_invalid_style_data_error_names_the_file(tmp_path, monkeypatch):
 def test_env_dir_must_be_a_directory(tmp_path, monkeypatch):
     monkeypatch.setenv(registry.USER_STYLES_DIR_ENV, str(tmp_path / "missing"))
     with pytest.raises(ToolError, match=registry.USER_STYLES_DIR_ENV):
+        registry.reload_styles()
+
+
+def test_unreadable_styles_dir_raises_tool_error(tmp_path, monkeypatch):
+    d = tmp_path / "unreadable"
+    d.mkdir()
+    target = d.resolve()
+    real_iterdir = Path.iterdir
+
+    def fake_iterdir(self):
+        if Path(self).resolve() == target:
+            raise PermissionError(13, "Permission denied")
+        return real_iterdir(self)
+
+    monkeypatch.setattr(Path, "iterdir", fake_iterdir)
+    monkeypatch.setenv(registry.USER_STYLES_DIR_ENV, str(d))
+    with pytest.raises(ToolError, match="Could not read styles directory"):
         registry.reload_styles()
 
 

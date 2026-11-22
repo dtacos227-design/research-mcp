@@ -86,7 +86,11 @@ def _load_style_dir(directory: Path, *, required: bool) -> dict[str, StyleSpec]:
         return styles
 
     root = directory.resolve()
-    for path in sorted(directory.iterdir()):
+    try:
+        entries = sorted(directory.iterdir())
+    except OSError as exc:
+        raise ToolError(f"Could not read styles directory {directory}: {exc}") from exc
+    for path in entries:
         if path.suffix.lower() not in _STYLE_SUFFIXES or not path.is_file():
             continue
         # Guard against symlinks pointing outside the styles directory.
