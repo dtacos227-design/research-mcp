@@ -102,3 +102,21 @@ async def test_skripsi_style_export_end_to_end(tmp_path, monkeypatch):
     assert "Pendahuluan" in body_text
     assert "[@" not in body_text
     assert "Doe" in body_text
+
+    # Front matter precedes the body, and both follow the skripsi_s1 outline order
+    # (registry titles, as the skeleton headings written by start_research).
+    front_matter = ["Sampul", "Lembar Pengesahan", "Abstrak", "Kata Pengantar", "Daftar Isi"]
+    chapters = [
+        "BAB I Pendahuluan",
+        "BAB II Tinjauan Pustaka",
+        "BAB III Metode Penelitian",
+        "BAB IV Hasil dan Pembahasan",
+        "BAB V Kesimpulan dan Saran",
+    ]
+    for heading in front_matter + chapters:
+        assert heading in body_text, f"{heading!r} missing from the exported document"
+
+    positions = [body_text.index(heading) for heading in front_matter + chapters]
+    assert positions == sorted(positions), "chapters are not in skripsi_s1 outline order"
+    assert body_text.index("Sampul") < body_text.index("BAB I Pendahuluan")
+    assert body_text.index("Daftar Isi") < body_text.index("BAB I Pendahuluan")
