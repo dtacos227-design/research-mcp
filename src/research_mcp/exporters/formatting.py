@@ -175,7 +175,21 @@ def _set_page_number_format(section, page_format: str) -> None:
     pg_num_type = sect_pr.find(qn("w:pgNumType"))
     if pg_num_type is None:
         pg_num_type = OxmlElement("w:pgNumType")
-        sect_pr.append(pg_num_type)
+        # `w:sectPr` is an ordered schema: pgNumType belongs right before cols.
+        sect_pr.insert_element_before(
+            pg_num_type,
+            "w:cols",
+            "w:formProt",
+            "w:vAlign",
+            "w:noEndnote",
+            "w:titlePg",
+            "w:textDirection",
+            "w:bidi",
+            "w:rtlGutter",
+            "w:docGrid",
+            "w:printerSettings",
+            "w:sectPrChange",
+        )
     pg_num_type.set(qn("w:fmt"), page_format)
 
 
@@ -188,7 +202,20 @@ def _set_columns(section, count: int) -> None:
     columns = sect_pr.find(qn("w:cols"))
     if columns is None:
         columns = OxmlElement("w:cols")
-        sect_pr.append(columns)
+        # `w:sectPr` is an ordered schema: cols belongs right after pgNumType.
+        sect_pr.insert_element_before(
+            columns,
+            "w:formProt",
+            "w:vAlign",
+            "w:noEndnote",
+            "w:titlePg",
+            "w:textDirection",
+            "w:bidi",
+            "w:rtlGutter",
+            "w:docGrid",
+            "w:printerSettings",
+            "w:sectPrChange",
+        )
     columns.set(qn("w:num"), str(count))
     columns.set(qn("w:space"), "720")
 
