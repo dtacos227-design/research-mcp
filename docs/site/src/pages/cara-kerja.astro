@@ -1,0 +1,100 @@
+---
+import Base from '../layouts/Base.astro'
+import FeatureCard from '../components/FeatureCard.astro'
+import ConnectorLine from '../components/ConnectorLine.astro'
+import PageHero from '../components/PageHero.astro'
+
+const features = [
+  {
+    icon: 'M21 21l-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607z',
+    titleId: 'Cari Literatur',
+    titleEn: 'Find Literature',
+    descId: 'Pencarian paralel ke 6 database ilmiah gratis (OpenAlex, Semantic Scholar, arXiv, PubMed, Crossref, Unpaywall). Lebih dari 250 juta paper dengan deduplikasi otomatis dan validasi DOI.',
+    descEn: 'Parallel search across 6 free academic databases (OpenAlex, Semantic Scholar, arXiv, PubMed, Crossref, Unpaywall). Over 250M papers with automatic deduplication and DOI validation.',
+  },
+  {
+    icon: 'M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9z',
+    titleId: 'Baca PDF Otomatis',
+    titleEn: 'Auto-Read PDFs',
+    descId: 'Unduh PDF legal open-access secara otomatis, lalu ekstrak per bagian (Methods, Results, Discussion) tanpa memuat seluruh file ke memori AI. Hemat token, hemat waktu.',
+    descEn: 'Auto-download legal open-access PDFs, then extract by section (Methods, Results, Discussion) without loading the full file into AI memory. Save tokens, save time.',
+  },
+  {
+    icon: 'M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25',
+    titleId: 'Kelola Sitasi',
+    titleEn: 'Manage Citations',
+    descId: 'Citekey deterministik, ekspor `.bib` dan `.csl.json`, format otomatis APA 7, IEEE, Vancouver, Chicago, MLA via Pandoc Citeproc. Gate anti-halusinasi mencegah sitasi palsu.',
+    descEn: 'Deterministic citekeys, export `.bib` and `.csl.json`, auto-format APA 7, IEEE, Vancouver, Chicago, MLA via Pandoc Citeproc. Anti-hallucination gate prevents fake citations.',
+  },
+  {
+    icon: 'M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10',
+    titleId: 'Tulis Draf',
+    titleEn: 'Write Drafts',
+    descId: 'Draf per bab Markdown dengan sintaks `[@citekey]`. Perintah `verify_citations` memblokir sitasi yang tidak terdaftar sebelum ekspor — tidak ada halusinasi masuk ke dokumen akhir.',
+    descEn: 'Per-chapter Markdown drafts with `[@citekey]` syntax. The `verify_citations` gate blocks unregistered citations before export — no hallucinations reach the final document.',
+  },
+  {
+    icon: 'M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125z',
+    titleId: 'Buat Grafik Ilmiah',
+    titleEn: 'Generate Charts',
+    descId: 'Jalankan skrip Matplotlib/Seaborn yang terkunci ke folder proyek. Output: PNG/SVG resolusi 300 DPI siap terbit di jurnal ilmiah.',
+    descEn: 'Run Matplotlib/Seaborn scripts locked to the project folder. Output: 300 DPI PNG/SVG ready for scientific journal publication.',
+  },
+  {
+    icon: 'M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3',
+    titleId: 'Ekspor Dokumen',
+    titleEn: 'Export Documents',
+    descId: 'Ekspor ke `.docx` via Pandoc, `.pdf` via Tectonic LaTeX, atau langsung ke WordCraft MCP untuk layout profesional dengan track changes dan inspeksi visual halaman.',
+    descEn: 'Export to `.docx` via Pandoc, `.pdf` via Tectonic LaTeX, or directly to WordCraft MCP for professional layout with track changes and visual page inspection.',
+  },
+]
+---
+
+<Base
+  title="Cara Kerja"
+  description="Bagaimana Research MCP bekerja — 6 kemampuan inti untuk riset ilmiah end-to-end.">
+
+  <PageHero
+    slug="cara-kerja"
+    titleId="Bagaimana cara kerjanya?"
+    titleEn="How does it work?"
+    descId="Dari pencarian literatur hingga dokumen siap terbit — semua dalam satu alur tanpa keluar dari terminal atau IDE-mu."
+    descEn="From literature search to publish-ready document — all in one workflow without leaving your terminal or IDE."
+  />
+
+  <section class="max-w-3xl mx-auto px-6 pt-12 pb-20">
+
+    <!-- Feature list with connector -->
+    <div id="feature-list" class="relative">
+      <ConnectorLine />
+      {features.map((f, i) => (
+        <FeatureCard
+          icon={f.icon}
+          titleId={f.titleId}
+          titleEn={f.titleEn}
+          descId={f.descId}
+          descEn={f.descEn}
+          number={i + 1}
+        />
+      ))}
+    </div>
+
+    <!-- CTA -->
+    <div class="mt-16 text-center">
+      <a href="/mulai"
+        class="font-mono px-8 py-3.5 transition-colors duration-200 inline-block"
+        style="background-color: #B85C38; color: #FDF8F0;"
+        onmouseover="this.style.backgroundColor='#C4954A'"
+        onmouseout="this.style.backgroundColor='#B85C38'"
+        data-id="Mulai Pakai →" data-en="Get Started →">
+        Mulai Pakai →
+      </a>
+    </div>
+  </section>
+</Base>
+
+<script>
+  import { initCaraKerjaAnimation } from '../scripts/animations'
+  document.addEventListener('astro:page-load', initCaraKerjaAnimation)
+  initCaraKerjaAnimation()
+</script>

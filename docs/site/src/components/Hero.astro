@@ -1,0 +1,198 @@
+---
+---
+
+<section id="hero"
+  class="relative flex flex-col items-center justify-center px-4 md:px-8 overflow-x-hidden"
+  style="min-height: calc(100vh - 4rem);">
+
+  <!-- Ruled paper lines (typewriter paper background) -->
+  <div class="absolute inset-0 pointer-events-none" aria-hidden="true"
+    style="
+      background-image:
+        repeating-linear-gradient(transparent, transparent 31px, #D4C09A 31px, #D4C09A 32px);
+      opacity: 0.2;
+    ">
+  </div>
+
+  <!-- Margin line (left red line of ruled paper) -->
+  <div class="absolute top-0 bottom-0 pointer-events-none" aria-hidden="true"
+    style="left: calc(50% - min(42rem, 46vw) + 2.5rem); width: 1px; background-color: #E09090; opacity: 0.25;">
+  </div>
+
+  <!-- Paper sheet -->
+  <div class="relative z-10 w-full max-w-3xl mx-auto py-10 md:py-14">
+
+    <!-- Typewriter header bar -->
+    <div class="flex items-center justify-between mb-8 pb-3"
+      style="border-bottom: 2px double #C4954A;">
+      <span class="font-mono text-xs" style="color: #C4954A; letter-spacing: 0.2em;">
+        RESEARCH-MCP
+      </span>
+      <span class="font-mono text-xs" style="color: #C4954A; letter-spacing: 0.15em;">
+        v1.0 · 2026
+      </span>
+    </div>
+
+    <!-- Label -->
+    <p class="font-mono text-xs uppercase mb-3"
+      style="color: #3D2A22; letter-spacing: 0.22em; opacity: 0.6;"
+      data-id="// untuk peneliti &amp; mahasiswa"
+      data-en="// for researchers &amp; students">
+      // untuk peneliti &amp; mahasiswa
+    </p>
+
+    <!-- Typewriter headline — SSR-visible, JS retypes it -->
+    <div class="mb-8" style="min-height: 9rem;">
+      <h1 id="hero-title"
+        class="font-mono text-2xl sm:text-3xl md:text-4xl lg:text-5xl leading-tight"
+        style="color: #1E130F; white-space: pre-wrap; word-break: break-word;">
+        <!-- Pre-filled for SSR / no-JS visibility -->
+        <noscript>Riset ilmiah —&#10;tanpa bayar API,&#10;tanpa kebocoran data.</noscript>
+      </h1>
+      <span id="cursor" class="font-mono text-2xl sm:text-3xl md:text-4xl lg:text-5xl"
+        style="color: #C4954A; animation: blink-cursor 0.9s step-end infinite;"
+        aria-hidden="true">|</span>
+    </div>
+
+    <!-- Sub — visible immediately, no opacity-0 -->
+    <p id="hero-sub"
+      class="font-mono text-sm md:text-base leading-relaxed mb-8"
+      style="color: #3D2A22; max-width: 600px; opacity: 0; animation: fadeReveal 0.5s ease-out 2.8s forwards;">
+      <span
+        data-id="Alat bantu AI gratis yang menghubungkan asisten AI‑mu ke 250 juta+ paper ilmiah, mengelola sitasi otomatis, dan mengekspor dokumen siap terbit — semua tersimpan di komputermu."
+        data-en="A free AI tool connecting your AI assistant to 250M+ scientific papers, managing citations automatically, and exporting publish-ready documents — stored on your machine.">
+        Alat bantu AI gratis yang menghubungkan asisten AI‑mu ke 250 juta+ paper ilmiah, mengelola sitasi otomatis, dan mengekspor dokumen siap terbit — semua tersimpan di komputermu.
+      </span>
+    </p>
+
+    <!-- CTA row — CSS-animated, no GSAP dependency -->
+    <div class="flex flex-wrap gap-3 items-center mb-8"
+      style="opacity: 0; animation: fadeReveal 0.5s ease-out 3.1s forwards;">
+      <a href="/mulai"
+        class="font-mono text-sm px-5 py-2.5 transition-colors duration-200 inline-block"
+        style="background-color: #B85C38; color: #FDF8F0; letter-spacing: 0.06em;"
+        onmouseover="this.style.backgroundColor='#C4954A'"
+        onmouseout="this.style.backgroundColor='#B85C38'"
+        data-id="$ mulai_pakai →" data-en="$ get_started →">
+        $ mulai_pakai →
+      </a>
+      <a href="/cara-kerja"
+        class="font-mono text-sm px-5 py-2.5 transition-colors duration-200 inline-block"
+        style="border: 1px solid #C4954A; color: #C4954A; letter-spacing: 0.06em;"
+        onmouseover="this.style.backgroundColor='#F5EDD8'"
+        onmouseout="this.style.backgroundColor='transparent'"
+        data-id="$ cara_kerja →" data-en="$ how_it_works →">
+        $ cara_kerja →
+      </a>
+    </div>
+
+    <!-- Badge chips -->
+    <div class="flex flex-wrap gap-2"
+      style="opacity: 0; animation: fadeReveal 0.5s ease-out 3.4s forwards;">
+      {[
+        { id: '250M+ paper',       en: '250M+ papers' },
+        { id: '6 database gratis', en: '6 free databases' },
+        { id: 'local-first',       en: 'local-first' },
+        { id: 'anti-halusinasi',   en: 'anti-hallucination' },
+        { id: 'MIT license',       en: 'MIT license' },
+      ].map(b => (
+        <span class="font-mono text-xs px-2 py-0.5"
+          style="border: 1px solid #E8D9BC; color: #3D2A22; background-color: #F5EDD8; letter-spacing: 0.03em;"
+          data-id={`[${b.id}]`} data-en={`[${b.en}]`}>
+          [{b.id}]
+        </span>
+      ))}
+    </div>
+
+    <!-- Footer line -->
+    <div class="mt-8 pt-4" style="border-top: 1px solid #E8D9BC;">
+      <p class="font-mono text-xs"
+        style="color: #3D2A22; letter-spacing: 0.05em; opacity: 0; animation: fadeReveal 0.5s ease-out 3.7s forwards;">
+        <span data-id="// tidak perlu kartu kredit · tidak ada data yang dikirim ke server"
+          data-en="// no credit card · no data sent to any server">
+          // tidak perlu kartu kredit · tidak ada data yang dikirim ke server
+        </span>
+      </p>
+    </div>
+
+  </div>
+
+  <!-- Scroll hint -->
+  <div class="absolute bottom-5 left-1/2 -translate-x-1/2"
+    style="color: #C4954A; opacity: 0; animation: fadeReveal 0.4s ease-out 4s forwards;"
+    aria-hidden="true">
+    <svg class="w-4 h-4 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+    </svg>
+  </div>
+
+</section>
+
+<style>
+  @keyframes blink-cursor {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0; }
+  }
+
+  @keyframes fadeReveal {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* prefers-reduced-motion: show everything immediately */
+  @media (prefers-reduced-motion: reduce) {
+    #hero-title, #hero-sub, #cursor { opacity: 1 !important; }
+    [style*="fadeReveal"] { animation: none !important; opacity: 1 !important; }
+  }
+</style>
+
+<script>
+  function initTypewriter() {
+    const titleEl = document.getElementById('hero-title') as HTMLElement | null
+    const cursor  = document.getElementById('cursor') as HTMLElement | null
+    if (!titleEl) return
+
+    // Clear SSR text placeholder (noscript won't appear in JS-enabled browsers,
+    // but just in case there's any whitespace in the h1)
+    titleEl.textContent = ''
+
+    const lang = localStorage.getItem('lang') ?? 'id'
+    const lines = lang === 'en'
+      ? ['Scientific research —', 'no API fees,', 'no data leakage.']
+      : ['Riset ilmiah —', 'tanpa bayar API,', 'tanpa kebocoran data.']
+    const fullText = lines.join('\n')
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      titleEl.textContent = fullText  // fullText already uses correct lang
+      if (cursor) cursor.style.display = 'none'
+      return
+    }
+
+    let i = 0
+
+    const type = () => {
+      if (i < fullText.length) {
+        titleEl.textContent += fullText[i]
+        const ch = fullText[i]
+        i++
+        const delay =
+          ch === '—'              ? 220
+          : ch === ',' || ch === '.' ? 180
+          : ch === '\n'           ? 350
+          : ch === ' '            ? 55
+          : 50 + Math.random() * 35
+        setTimeout(type, delay)
+      } else {
+        // Typing done — hide cursor, let CSS animations handle the rest
+        setTimeout(() => {
+          if (cursor) cursor.style.opacity = '0'
+        }, 500)
+      }
+    }
+
+    setTimeout(type, 350)
+  }
+
+  initTypewriter()
+  document.addEventListener('astro:page-load', initTypewriter)
+</script>

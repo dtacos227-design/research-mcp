@@ -1,0 +1,35 @@
+---
+interface Props {
+  step: number
+  titleId: string
+  titleEn: string
+  descId: string
+  descEn: string
+  code: string
+  lang?: string
+}
+const { step, titleId, titleEn, descId, descEn, code, lang = 'bash' } = Astro.props
+---
+
+<div class="step-block opacity-0 relative pl-14 pb-14"
+  style="transform: translateX(-30px);">
+
+  <!-- Step circle -->
+  <div class="absolute left-0 -translate-x-1/2 w-10 h-10 rounded-full flex items-center justify-center font-mono font-bold text-base"
+    style="background-color: #B85C38; color: #FDF8F0;">
+    {step}
+  </div>
+
+  <h3 class="font-mono text-xl mb-2" style="color: #1E130F;"
+    data-id={titleId} data-en={titleEn}>
+    {titleId}
+  </h3>
+
+  <p class="font-mono text-xs leading-relaxed mb-4" style="color: #3D2A22;"
+    data-id={descId} data-en={descEn}>
+    {descId}
+  </p>
+
+  <pre class="rounded-sm p-4 overflow-x-auto text-sm font-mono border"
+    style="background-color: #1E130F; color: #F5EDD8; border-color: #E8D9BC;"><code>{code}</code></pre>
+</div>

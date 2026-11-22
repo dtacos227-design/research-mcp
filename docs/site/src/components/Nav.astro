@@ -1,0 +1,111 @@
+---
+import Logo from './Logo.astro'
+
+const navLinks = [
+  { href: '/',             id: 'Beranda',      en: 'Home' },
+  { href: '/cara-kerja',   id: 'Cara Kerja',   en: 'How It Works' },
+  { href: '/mulai',        id: 'Mulai Pakai',  en: 'Get Started' },
+  { href: '/referensi',    id: 'Referensi',    en: 'Reference' },
+  { href: '/kenapa-gratis',id: 'Kenapa Gratis?',en: 'Why Free?' },
+]
+---
+
+<nav id="main-nav"
+  class="fixed top-0 left-0 right-0 z-50 backdrop-blur-sm"
+  style="background-color: rgba(253,248,240,0.88); border-bottom: 1px solid #E8D9BC;">
+  <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+
+    <!-- Logo + name -->
+    <a href="/" class="flex items-center gap-2 group">
+      <Logo class="w-8 h-8 transition-transform group-hover:scale-105" />
+      <span class="font-heading text-lg text-ink-900 font-semibold tracking-tight">
+        Research MCP
+      </span>
+    </a>
+
+    <!-- Desktop links -->
+    <ul class="hidden md:flex items-center gap-8" id="nav-links">
+      {navLinks.map(l => (
+        <li>
+          <a href={l.href}
+            class="font-body text-sm text-ink-700 hover:text-amber-500 transition-colors nav-link"
+            data-id={l.id} data-en={l.en}>
+            {l.id}
+          </a>
+        </li>
+      ))}
+    </ul>
+
+    <!-- Lang toggle + hamburger -->
+    <div class="flex items-center gap-4">
+      <button id="lang-toggle"
+        class="font-mono text-xs border border-parchment-200 rounded px-2 py-1
+          text-ink-700 hover:border-amber-500 hover:text-amber-500 transition-colors"
+        aria-label="Toggle language">
+        ID
+      </button>
+      <button id="hamburger" class="md:hidden text-ink-900 p-1" aria-label="Open menu">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path id="ham-icon" stroke-linecap="round" stroke-linejoin="round"
+            d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Mobile menu -->
+  <div id="mobile-menu" class="hidden md:hidden border-t border-parchment-200 bg-parchment-50 px-6 py-4">
+    <ul class="flex flex-col gap-4">
+      {navLinks.map(l => (
+        <li>
+          <a href={l.href}
+            class="font-body text-base text-ink-700 hover:text-amber-500 transition-colors nav-link"
+            data-id={l.id} data-en={l.en}>
+            {l.id}
+          </a>
+        </li>
+      ))}
+    </ul>
+  </div>
+</nav>
+
+<!-- Spacer so content doesn't go under fixed nav -->
+<div class="h-16"></div>
+
+<script>
+  function applyLang(lang: string) {
+    document.querySelectorAll<HTMLElement>('[data-id][data-en]').forEach(el => {
+      el.textContent = lang === 'en' ? (el.dataset.en ?? '') : (el.dataset.id ?? '')
+    })
+    const toggle = document.getElementById('lang-toggle')
+    if (toggle) toggle.textContent = lang === 'en' ? 'EN' : 'ID'
+    document.documentElement.lang = lang === 'en' ? 'en' : 'id'
+  }
+
+  function initNav() {
+    const stored = localStorage.getItem('lang') ?? 'id'
+    applyLang(stored)
+
+    document.getElementById('lang-toggle')?.addEventListener('click', () => {
+      const current = localStorage.getItem('lang') ?? 'id'
+      const next = current === 'id' ? 'en' : 'id'
+      localStorage.setItem('lang', next)
+      applyLang(next)
+    })
+
+    const hamburger = document.getElementById('hamburger')
+    const mobileMenu = document.getElementById('mobile-menu')
+    hamburger?.addEventListener('click', () => {
+      mobileMenu?.classList.toggle('hidden')
+    })
+
+    // Close mobile menu on link click
+    mobileMenu?.querySelectorAll('a').forEach(a => {
+      a.addEventListener('click', () => mobileMenu.classList.add('hidden'))
+    })
+  }
+
+  // Run on first load and after Astro View Transitions
+  initNav()
+  document.addEventListener('astro:page-load', initNav)
+</script>

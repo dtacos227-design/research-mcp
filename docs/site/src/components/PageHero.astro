@@ -1,0 +1,60 @@
+---
+interface Props {
+  slug: string
+  titleId: string
+  titleEn: string
+  descId: string
+  descEn: string
+  /** Use max-w-5xl for wide table pages (referensi). Default: max-w-3xl */
+  wide?: boolean
+}
+
+const { slug, titleId, titleEn, descId, descEn, wide = false } = Astro.props
+const widthClass = wide ? 'max-w-5xl' : 'max-w-3xl'
+---
+
+<header class="relative overflow-x-hidden pt-14 pb-10 md:pt-20 md:pb-14"
+  style="border-bottom: 1px solid #E8D9BC;">
+
+  <!-- Ruled paper background lines -->
+  <div class="absolute inset-0 pointer-events-none" aria-hidden="true"
+    style="background-image: repeating-linear-gradient(transparent, transparent 31px, #D4C09A 31px, #D4C09A 32px); opacity: 0.15;">
+  </div>
+
+  <!-- Left margin line -->
+  <div class="absolute top-0 bottom-0 pointer-events-none" aria-hidden="true"
+    style="left: calc(50% - min(42rem, 46vw) + 2.5rem); width: 1px; background-color: #E09090; opacity: 0.25;">
+  </div>
+
+  <div class={`relative z-10 ${widthClass} mx-auto px-6`}>
+
+    <!-- Terminal prompt line -->
+    <p class="font-mono text-xs mb-4 flex items-center gap-2"
+      style="color: #C4954A; letter-spacing: 0.15em;">
+      <span style="opacity: 0.5;">$</span>
+      <span>research-mcp</span>
+      <span class="px-1.5 py-0.5 rounded-sm"
+        style="background-color: #C4954A; color: #FDF8F0; letter-spacing: 0.08em; font-size: 0.65rem;">
+        {slug}
+      </span>
+    </p>
+
+    <!-- Main heading with typewriter reveal -->
+    <h1 class="font-mono text-2xl sm:text-3xl md:text-4xl font-normal leading-tight mb-5"
+      style="color: #1E130F;"
+      data-id={titleId} data-en={titleEn}>
+      {titleId}
+    </h1>
+
+    <!-- Separator line -->
+    <div class="mb-5" style="border-top: 1px solid #C4954A; width: 3rem;"></div>
+
+    <!-- Description -->
+    <p class="font-mono text-sm md:text-base leading-relaxed"
+      style="color: #3D2A22; max-width: 56ch;"
+      data-id={descId} data-en={descEn}>
+      {descId}
+    </p>
+
+  </div>
+</header>

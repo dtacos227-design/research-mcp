@@ -1,0 +1,180 @@
+---
+import Base from '../layouts/Base.astro'
+import PullQuote from '../components/PullQuote.astro'
+import PageHero from '../components/PageHero.astro'
+
+const sources = [
+  {
+    name: 'OpenAlex',
+    url: 'https://openalex.org',
+    countId: '250M+ paper',
+    descId: 'Platform open-source yang dibangun komunitas untuk menggantikan Microsoft Academic. Mencakup hampir semua paper ilmiah yang pernah diterbitkan. 100% gratis, API tanpa batas.',
+    descEn: 'Open-source platform built by the community to replace Microsoft Academic. Covers almost every published scientific paper. 100% free, unlimited API.',
+  },
+  {
+    name: 'Semantic Scholar',
+    url: 'https://www.semanticscholar.org',
+    countId: '200M+ paper',
+    descId: 'Dikembangkan oleh Allen Institute for AI. Kuat dalam grafik sitasi dan rekomendasi paper terkait berdasarkan semantik, bukan hanya judul.',
+    descEn: 'Developed by Allen Institute for AI. Strong in citation graphs and semantics-based related paper recommendations.',
+  },
+  {
+    name: 'arXiv',
+    url: 'https://arxiv.org',
+    countId: '2M+ preprint',
+    descId: 'Preprint server terbesar untuk fisika, matematika, ilmu komputer, dan biologi. Paper sering tersedia di sini sebelum peer-review — akses instan, tidak ada paywall.',
+    descEn: 'The largest preprint server for physics, math, computer science, and biology. Papers often available before peer-review — instant access, no paywall.',
+  },
+  {
+    name: 'PubMed',
+    url: 'https://pubmed.ncbi.nlm.nih.gov',
+    countId: '36M+ artikel',
+    descId: 'Database biomedis dan ilmu kehidupan dari National Institutes of Health (NIH). Standar emas untuk riset kesehatan dan kedokteran. Gratis selamanya.',
+    descEn: 'Biomedical and life sciences database from the National Institutes of Health (NIH). Gold standard for health and medical research. Free forever.',
+  },
+  {
+    name: 'Crossref',
+    url: 'https://www.crossref.org',
+    countId: 'Metadata resmi DOI',
+    descId: 'Lembaga resmi untuk metadata DOI — validasi judul, penulis, jurnal, dan tahun terbit setiap paper berdasarkan identifikator yang sudah terverifikasi.',
+    descEn: 'Official DOI metadata authority — validates title, authors, journal, and publication year for every paper based on verified identifiers.',
+  },
+  {
+    name: 'Unpaywall',
+    url: 'https://unpaywall.org',
+    countId: '50M+ PDF legal',
+    descId: 'Menemukan versi PDF open-access yang sah untuk paper berdasarkan DOI. Tidak membobol paywall — hanya menemukan PDF yang memang sudah tersedia secara legal.',
+    descEn: 'Finds legal open-access PDF versions of papers by DOI. Does not break paywalls — only finds PDFs already legally available.',
+  },
+]
+---
+
+<Base
+  title="Kenapa Gratis?"
+  description="Mengapa Research MCP sepenuhnya gratis — filosofi local-first, sumber data terbuka, dan hak peneliti atas infrastruktur riset.">
+
+  <PageHero
+    slug="kenapa-gratis"
+    titleId="Kenapa gratis?"
+    titleEn="Why free?"
+    descId="Pertanyaan yang wajar. Jadi mari kita bahas secara jujur — dari mana datanya, siapa yang bayar, dan apa yang kamu dapatkan."
+    descEn="A fair question. So let's be honest — where does the data come from, who pays, and what do you actually get."
+  />
+
+  <section class="max-w-3xl mx-auto px-6 pt-12 pb-20">
+
+    <p class="font-mono text-sm leading-relaxed mb-6" style="color: #3D2A22;"
+      data-id="Pertanyaan yang wajar. Kalau ada yang bilang 'gratis', biasanya ada tagihan tersembunyi di suatu tempat. Jadi mari kita bahas secara jujur."
+      data-en="A fair question. When something is 'free', there's usually a hidden bill somewhere. So let's be honest about this.">
+      Pertanyaan yang wajar. Kalau ada yang bilang "gratis", biasanya ada tagihan tersembunyi di suatu tempat. Jadi mari kita bahas secara jujur.
+    </p>
+
+    <p class="font-mono text-sm leading-relaxed mb-10" style="color: #3D2A22;"
+      data-id="Research MCP tidak menjual data, tidak menyimpan query pencarian, dan tidak membutuhkan akun. Semua data tersimpan di komputermu — database SQLite lokal, PDF di folder lokalmu, draf di komputermu."
+      data-en="Research MCP doesn't sell data, doesn't store your search queries, and doesn't require an account. All data lives on your computer — a local SQLite database, PDFs in your local folder, drafts on your machine.">
+      Research MCP tidak menjual data, tidak menyimpan query pencarian, dan tidak membutuhkan akun. Semua data tersimpan di komputermu — database SQLite lokal, PDF di folder lokalmu, draf di komputermu.
+    </p>
+
+    <PullQuote
+      quoteId='"Paper ilmiah yang kamu tulis bukan milik korporasi — begitu pula alat untuk membacanya."'
+      quoteEn='"The scientific papers you write don\'t belong to corporations — neither should the tools to read them."'
+    />
+
+    <!-- Source by source -->
+    <h3 class="font-mono text-xl mt-14 mb-4" style="color: #1E130F;"
+      data-id="// Dari mana data literaturnya?" data-en="// Where does the literature data come from?">
+      // Dari mana data literaturnya?
+    </h3>
+
+    <p class="font-mono text-sm leading-relaxed mb-10" style="color: #3D2A22;"
+      data-id="Research MCP menggabungkan enam database ilmiah yang semuanya menyediakan akses gratis melalui API publik mereka. Tidak ada satu sen pun yang perlu dibayar ke mereka."
+      data-en="Research MCP combines six scientific databases that all provide free access through their public APIs. Not a single cent needs to be paid to any of them.">
+      Research MCP menggabungkan enam database ilmiah yang semuanya menyediakan akses gratis melalui API publik mereka. Tidak ada satu sen pun yang perlu dibayar ke mereka.
+    </p>
+
+    <div class="flex flex-col gap-6">
+      {sources.map(s => (
+        <div class="fade-up p-5 rounded-sm border" style="border-color: #E8D9BC; background-color: #F5EDD8;">
+          <div class="flex items-start justify-between mb-2">
+            <a href={s.url} target="_blank" rel="noopener"
+              class="font-mono text-base hover:underline"
+              style="color: #B85C38;">
+              {s.name} ↗
+            </a>
+            <span class="font-mono text-xs px-2 py-0.5 rounded-full"
+              style="background-color: #E8D9BC; color: #3D2A22;">
+              {s.countId}
+            </span>
+          </div>
+          <p class="font-mono text-xs leading-relaxed" style="color: #3D2A22;"
+            data-id={s.descId} data-en={s.descEn}>
+            {s.descId}
+          </p>
+        </div>
+      ))}
+    </div>
+
+    <!-- Local-first section -->
+    <h3 class="font-mono text-xl mt-14 mb-4" style="color: #1E130F;"
+      data-id="// Apa itu 'local-first'?" data-en="// What is 'local-first'?">
+      // Apa itu "local-first"?
+    </h3>
+
+    <p class="font-mono text-sm leading-relaxed mb-5" style="color: #3D2A22;"
+      data-id="Local-first berarti datamu tinggal di komputermu, bukan di server kami. Research MCP menyimpan semua metadata paper, teks PDF, draf, dan daftar pustaka ke dalam SQLite di lokal — bisa di-backup, bisa dibaca offline, tidak tergantung internet."
+      data-en="Local-first means your data lives on your computer, not on our servers. Research MCP stores all paper metadata, PDF text, drafts, and bibliographies in a local SQLite database — backable, readable offline, internet-independent.">
+      Local-first berarti datamu tinggal di komputermu, bukan di server kami. Research MCP menyimpan semua metadata paper, teks PDF, draf, dan daftar pustaka ke dalam SQLite di lokal — bisa di-backup, bisa dibaca offline, tidak tergantung internet.
+    </p>
+
+    <p class="font-mono text-sm leading-relaxed mb-12" style="color: #3D2A22;"
+      data-id="Ini bukan hanya soal privasi — ini soal kepemilikan. Data riset kamu adalah milik kamu."
+      data-en="This isn't just about privacy — it's about ownership. Your research data belongs to you.">
+      Ini bukan hanya soal privasi — ini soal kepemilikan. Data riset kamu adalah milik kamu.
+    </p>
+
+    <!-- CTA -->
+    <div class="text-center pt-6 border-t" style="border-color: #E8D9BC;">
+      <p class="font-mono text-sm mb-5" style="color: #3D2A22;"
+        data-id="Sudah yakin? Mulai risetmu sekarang."
+        data-en="Convinced? Start your research now.">
+        Sudah yakin? Mulai risetmu sekarang.
+      </p>
+      <a href="/mulai"
+        class="font-mono text-sm px-8 py-3 transition-colors duration-200 inline-block"
+        style="background-color: #B85C38; color: #FDF8F0;"
+        onmouseover="this.style.backgroundColor='#C4954A'"
+        onmouseout="this.style.backgroundColor='#B85C38'"
+        data-id="Mulai Pakai →" data-en="Get Started →">
+        Mulai Pakai →
+      </a>
+    </div>
+
+  </section>
+</Base>
+
+<script>
+  // IntersectionObserver fade-up for source cards
+  function initFadeUp() {
+    const els = document.querySelectorAll<HTMLElement>('.fade-up')
+    if (!els.length) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      els.forEach(el => { el.style.opacity = '1'; el.style.animation = 'none' })
+      return
+    }
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach((e, i) => {
+        if (e.isIntersecting) {
+          setTimeout(() => {
+            ;(e.target as HTMLElement).style.animationDelay = `${i * 0.08}s`
+            ;(e.target as HTMLElement).classList.add('fade-up')
+          }, 0)
+          obs.unobserve(e.target)
+        }
+      })
+    }, { threshold: 0.1 })
+    els.forEach(el => obs.observe(el))
+  }
+
+  document.addEventListener('astro:page-load', initFadeUp)
+  initFadeUp()
+</script>

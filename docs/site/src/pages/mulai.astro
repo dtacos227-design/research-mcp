@@ -1,0 +1,165 @@
+---
+import Base from '../layouts/Base.astro'
+import StepBlock from '../components/StepBlock.astro'
+import PageHero from '../components/PageHero.astro'
+
+const steps = [
+  {
+    titleId: 'Install Research MCP',
+    titleEn: 'Install Research MCP',
+    descId: 'Pastikan Python 3.11+ dan uv sudah terpasang. Jalankan perintah berikut untuk menyiapkan environment Research MCP.',
+    descEn: 'Make sure Python 3.11+ and uv are installed. Run the following command to set up the Research MCP environment.',
+    code: `# Clone repo
+git clone https://github.com/your-org/research-mcp.git
+cd research-mcp
+
+# Install dependencies
+uv sync
+
+# Verify server starts
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0"}}}' \\
+  | timeout 5 uv run research-mcp 2>/dev/null \\
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print('OK:', d['result']['serverInfo']['name'])"`,
+  },
+  {
+    titleId: 'Konfigurasikan ke AI Client',
+    titleEn: 'Configure your AI Client',
+    descId: 'Tambahkan Research MCP ke OpenCode atau Claude Code. Ganti /path/to/research-mcp dengan path absolut folder yang baru di-clone.',
+    descEn: 'Add Research MCP to OpenCode or Claude Code. Replace /path/to/research-mcp with the absolute path of the cloned folder.',
+    code: `# OpenCode (~/.config/opencode/opencode.json)
+{
+  "mcp": {
+    "research-mcp": {
+      "type": "local",
+      "command": ["uv", "--directory", "/path/to/research-mcp", "run", "research-mcp"],
+      "environment": {
+        "RESEARCH_MCP_EMAIL": "email@kamu.com"
+      },
+      "enabled": true
+    }
+  }
+}
+
+# Claude Code (terminal)
+claude mcp add research-mcp \\
+  -e RESEARCH_MCP_EMAIL="email@kamu.com" \\
+  -- uv --directory /path/to/research-mcp run research-mcp`,
+  },
+  {
+    titleId: 'Buat Proyek Riset',
+    titleEn: 'Create a Research Project',
+    descId: 'Setiap proyek riset terisolasi dalam foldernya sendiri. Gunakan perintah create_project untuk memulai.',
+    descEn: 'Each research project is isolated in its own folder. Use create_project to get started.',
+    code: `# Di dalam AI client kamu, panggil tool:
+create_project(
+    name="Skripsi NLP Sentiment",
+    description="Analisis sentimen ulasan produk dengan BERT"
+)
+
+# Output:
+# {
+#   "project_id": "skripsi-nlp-sentiment",
+#   "workspace": "/home/user/.research-mcp/workspaces/skripsi-nlp-sentiment/",
+#   "message": "Project created successfully"
+# }`,
+  },
+  {
+    titleId: 'Cari dan Simpan Literatur',
+    titleEn: 'Search and Save Literature',
+    descId: 'Cari paper ilmiah dari 6 database sekaligus. Simpan yang relevan — PDF akan diunduh dan diparsing otomatis per bagian.',
+    descEn: 'Search scientific papers from 6 databases at once. Save the relevant ones — PDFs will be automatically downloaded and parsed by section.',
+    code: `# Cari paper
+search_papers(
+    query="BERT sentiment analysis product review",
+    sources=["openalex", "semantic_scholar", "arxiv"],
+    year_from=2020,
+    limit=10
+)
+
+# Simpan paper + unduh PDF
+save_paper_to_project(
+    project_id="skripsi-nlp-sentiment",
+    identifier="10.18653/v1/2020.acl-main.656",  # DOI atau arXiv ID
+    download_pdf=True
+)
+
+# Baca bagian tertentu tanpa load seluruh PDF
+read_paper_section(
+    project_id="skripsi-nlp-sentiment",
+    citekey="devlin2019bert",
+    section_name="Methods"
+)`,
+  },
+]
+---
+
+<Base
+  title="Mulai Pakai"
+  description="Panduan langkah demi langkah untuk mulai menggunakan Research MCP — install, konfigurasi, dan cari literatur pertamamu.">
+
+  <PageHero
+    slug="mulai"
+    titleId="Dari nol ke siap riset"
+    titleEn="From zero to research-ready"
+    descId="Empat langkah. Kurang dari 10 menit. Tidak perlu kartu kredit."
+    descEn="Four steps. Under 10 minutes. No credit card required."
+  />
+
+  <section class="max-w-3xl mx-auto px-6 pt-12 pb-20">
+
+    <!-- Prerequisites badge -->
+    <div class="mb-12 p-4 rounded-sm border font-body text-sm"
+      style="background-color: #F5EDD8; border-color: #E8D9BC; color: #3D2A22;">
+      <strong class="font-mono" style="color: #1E130F;"
+        data-id="// prasyarat: " data-en="// prerequisites: ">// prasyarat: </strong>
+      <span data-id="Python 3.11+, uv, Pandoc ≥ 3.0 (wajib). Tectonic & WordCraft (opsional)."
+        data-en="Python 3.11+, uv, Pandoc ≥ 3.0 (required). Tectonic & WordCraft (optional).">
+        Python 3.11+, uv, Pandoc ≥ 3.0 (wajib). Tectonic & WordCraft (opsional).
+      </span>
+    </div>
+
+    <!-- Step list -->
+    <div id="step-list" class="relative">
+      <!-- Vertical connector line -->
+      <svg class="absolute pointer-events-none" style="left: 1.25rem; top: 0; width: 2px; height: 100%; overflow: visible;">
+        <line id="step-line" x1="1" y1="0" x2="1" y2="100%"
+          stroke="#C4954A" stroke-width="2"
+          stroke-dasharray="2000" stroke-dashoffset="2000"/>
+      </svg>
+
+      {steps.map((s, i) => (
+        <StepBlock
+          step={i + 1}
+          titleId={s.titleId}
+          titleEn={s.titleEn}
+          descId={s.descId}
+          descEn={s.descEn}
+          code={s.code}
+        />
+      ))}
+    </div>
+
+    <!-- Next step hint -->
+    <div class="mt-8 text-center">
+      <p class="font-mono text-sm mb-4" style="color: #3D2A22;"
+        data-id="Sudah siap? Jelajahi semua 21 tools yang tersedia."
+        data-en="Ready? Explore all 21 available tools.">
+        Sudah siap? Jelajahi semua 21 tools yang tersedia.
+      </p>
+      <a href="/referensi"
+        class="font-mono text-sm px-6 py-2.5 transition-colors duration-200 inline-block border"
+        style="border-color: #B85C38; color: #B85C38;"
+        onmouseover="this.style.backgroundColor='#B85C38'; this.style.color='#FDF8F0'"
+        onmouseout="this.style.backgroundColor='transparent'; this.style.color='#B85C38'"
+        data-id="Lihat Referensi →" data-en="View Reference →">
+        Lihat Referensi →
+      </a>
+    </div>
+  </section>
+</Base>
+
+<script>
+  import { initMulaiAnimation } from '../scripts/animations'
+  document.addEventListener('astro:page-load', initMulaiAnimation)
+  initMulaiAnimation()
+</script>
