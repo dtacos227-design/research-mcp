@@ -23,7 +23,6 @@ from research_mcp.exporters.formatting import (
 from research_mcp.exporters.pandoc_engine import (
     _read_draft,
     detect_pandoc,
-    merge_draft_markdown,
     render_docx,
     render_markdown,
 )
@@ -1154,28 +1153,39 @@ async def export_to_latex(
 async def export_to_markdown_bundle(
     project_id: str,
     output_name: str,
-    csl_style: str = "apa",
+    csl_style: str | None = None,
     strict_citations: bool = True,
+    style: str | None = None,
 ) -> dict:
     """Merge all draft chapters into one Citeproc-rendered Markdown file.
 
-    In-text `[@citekey]` markers are formatted and a reference list is appended;
-    the result is written to `exports/<output_name>.md`.
+    The resolved research style (`style`, else the project's, else the default)
+    decides the chapter merge order and citation default; an explicit `csl_style`
+    still wins. In-text `[@citekey]` markers are formatted and a reference list is
+    appended; the result is written to `exports/<output_name>.md`.
+
+    The export refuses to run until the research brief is complete and at least
+    one paper is saved, returning `precondition_failed` plus `style_id` and
+    remediation steps.
     """
     try:
         settings = get_settings()
         conn = await get_connection(settings.db_path)
         try:
-            try:
-                project = await repository.get_project(conn, project_id)
-            except repository.ProjectNotFoundError as exc:
-                raise ToolError(str(exc)) from exc
+            project = await _get_project_or_raise(conn, project_id)
+            resolved_style = await _resolve_style_for_export(conn, project_id, style)
+            blocked = await _precondition_failed(conn, project_id, resolved_style)
+            if blocked is not None:
+                return {**blocked, "style_id": resolved_style.id}
+
             project_dir = _project_dir(settings, project)
             output = _export_target(project_dir, output_name, ".md")
-            csl_name = resolve_csl(csl_style)
+            effective_csl = csl_style or resolved_style.citation
+            csl_name = resolve_csl(effective_csl)
 
             sections = await repository.list_draft_sections(conn, project_id)
-            markdown = _draft_markdown_or_raise(merge_draft_markdown(project_dir, sections))
+            markdown, extra_files = _style_merge_markdown(project_dir, sections, resolved_style)
+            markdown = _draft_markdown_or_raise(markdown)
             missing = await _citation_gate(conn, project_id, markdown, strict_citations)
             bib_path, _csl_json = await _refresh_bibliography(conn, project_id, project_dir)
 
@@ -1185,9 +1195,13 @@ async def export_to_markdown_bundle(
             return {
                 "output_path": str(output),
                 "format": "markdown",
-                "csl_style": csl_style,
+                "style_id": resolved_style.id,
+                "csl_style": effective_csl,
                 "cited_but_missing": missing,
-                "warnings": _warnings_for_missing(missing),
+                "warnings": [
+                    *_warnings_for_missing(missing),
+                    *_warnings_for_extra_drafts(extra_files),
+                ],
             }
         finally:
             await conn.close()

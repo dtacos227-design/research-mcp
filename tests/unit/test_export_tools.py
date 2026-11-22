@@ -85,10 +85,61 @@ async def test_markdown_bundle_merges_all_chapters(project_with_drafts, monkeypa
     output = workspace_root / project.slug / "exports" / "paper.md"
     assert result["output_path"] == str(output)
     assert result["format"] == "markdown"
+    assert result["style_id"] == "article_imrad"
+    assert result["csl_style"] == "apa"
     merged = recorded[0]["markdown"]
     assert "Abs body." in merged
     assert "Intro body [@doe2024valid]." in merged
     assert merged.index("Abs body.") < merged.index("Intro body")
+
+
+@pytest.mark.asyncio
+async def test_markdown_bundle_without_brief_is_blocked(tmp_path, monkeypatch):
+    workspace_root = tmp_path / "workspaces"
+    monkeypatch.setenv("RESEARCH_MCP_WORKSPACE", str(workspace_root))
+    monkeypatch.setenv("RESEARCH_MCP_DB_PATH", str(tmp_path / "research_mcp.db"))
+    settings = get_settings()
+    conn = await get_connection(settings.db_path)
+    try:
+        project = await create_project(conn, settings.workspace_dir, "No Brief")
+    finally:
+        await conn.close()
+    recorded = []
+    from research_mcp import server
+
+    monkeypatch.setattr(server, "render_markdown", _fake_render_engine(recorded))
+
+    result = await export_to_markdown_bundle(project.id, "paper")
+
+    assert result.get("status") == "precondition_failed"
+    assert result["style_id"] == "article_imrad"
+    assert "brief" in str(result["failed"]).lower()
+    assert result["remediation"]
+    assert recorded == []
+    assert not (workspace_root / project.slug / "exports" / "paper.md").exists()
+
+
+@pytest.mark.asyncio
+async def test_markdown_bundle_uses_the_style_merge_and_drops_guidance(
+    project_with_drafts, monkeypatch
+):
+    project, _workspace_root = project_with_drafts
+    await save_draft_section(
+        project.id,
+        "00_abstract.md",
+        "# Abstract\n\n<!-- guidance: never export this -->\n\nSkeleton-stripped body.",
+    )
+    recorded = []
+    from research_mcp import server
+
+    monkeypatch.setattr(server, "render_markdown", _fake_render_engine(recorded))
+
+    await export_to_markdown_bundle(project.id, "paper")
+
+    merged = recorded[0]["markdown"]
+    assert "Skeleton-stripped body." in merged
+    assert "guidance:" not in merged
+    assert "<!--" not in merged
 
 
 @pytest.mark.asyncio
