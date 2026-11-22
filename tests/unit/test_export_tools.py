@@ -172,13 +172,20 @@ async def test_latex_export_reports_tex_and_pdf_paths(project_with_drafts, monke
     from research_mcp import server
 
     def fake_render_latex(
-        markdown, template_path, bib_path, csl_path, output_tex, resource_path=None
+        markdown,
+        template_path,
+        bib_path,
+        csl_path,
+        output_tex,
+        resource_path=None,
+        metadata=None,
     ):
         recorded.append(
             {
                 "markdown": markdown,
                 "template": template_path,
                 "resource_path": resource_path,
+                "metadata": metadata,
             }
         )
         output_tex.parent.mkdir(parents=True, exist_ok=True)
@@ -200,6 +207,9 @@ async def test_latex_export_reports_tex_and_pdf_paths(project_with_drafts, monke
     assert result["output_path"] == result["pdf_path"]
     assert "Intro body" in recorded[0]["markdown"]
     assert str(recorded[0]["template"]).endswith("article_id.tex")
+    metadata = recorded[0]["metadata"]
+    assert metadata
+    assert "geometry" in metadata
 
 
 @pytest.mark.asyncio

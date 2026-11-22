@@ -15,7 +15,11 @@ from research_mcp.db import repository
 from research_mcp.db.database import get_connection
 from research_mcp.exporters import latex_engine, wordcraft_bridge
 from research_mcp.exporters.docx_polisher import polish_docx
-from research_mcp.exporters.formatting import apply_docx_formatting, normalize_chapter_markdown
+from research_mcp.exporters.formatting import (
+    apply_docx_formatting,
+    latex_metadata,
+    normalize_chapter_markdown,
+)
 from research_mcp.exporters.pandoc_engine import (
     _read_draft,
     detect_pandoc,
@@ -830,6 +834,17 @@ def _warnings_for_extra_drafts(extra_files: list[str]) -> list[str]:
     return [f"Exported draft(s) not in the style outline: {', '.join(extra_files)}"]
 
 
+def _warnings_for_two_column(style: StyleSpec, latex_name: str) -> list[str]:
+    """Report that the bundled LaTeX templates cannot honor a two-column style."""
+    if not style.formatting.two_column:
+        return []
+    return [
+        f"Style {style.id!r} requests a two-column layout, but the bundled LaTeX "
+        f"template {latex_name!r} is single-column; the PDF is rendered in one column. "
+        "Export to DOCX or open it in WordCraft for two columns."
+    ]
+
+
 @mcp.tool()
 async def generate_bibliography(
     project_id: str,
@@ -1007,30 +1022,43 @@ async def export_to_docx(
 async def export_to_latex(
     project_id: str,
     output_name: str,
-    template_name: str = "ieee",
+    template_name: str | None = None,
     compile_pdf: bool = True,
     strict_citations: bool = True,
+    style: str | None = None,
 ) -> dict:
     """Export every draft chapter to a standalone `.tex`, optionally compiling a PDF.
 
-    Writes `exports/<output_name>.tex` and, when `compile_pdf` is true, compiles
-    it with Tectonic into `exports/<output_name>.pdf`.
+    Merges the draft chapters in the resolved style's outline order, verifies
+    every `[@citekey]` against the project library, and forwards the style's page
+    geometry/typography as Pandoc metadata. `template_name` defaults to the
+    style's `latex_template` (else `ieee`). Writes `exports/<output_name>.tex`
+    and, when `compile_pdf` is true, compiles it with Tectonic into
+    `exports/<output_name>.pdf`.
+
+    The export refuses to run until the research brief is complete and at least
+    one paper is saved, returning `precondition_failed` with remediation steps.
     """
     try:
         settings = get_settings()
         conn = await get_connection(settings.db_path)
         try:
-            try:
-                project = await repository.get_project(conn, project_id)
-            except repository.ProjectNotFoundError as exc:
-                raise ToolError(str(exc)) from exc
+            resolved_style = await _resolve_style_for_export(conn, project_id, style)
+            blocked = await _precondition_failed(conn, project_id, resolved_style)
+            if blocked is not None:
+                return blocked
+
+            project = await _get_project_or_raise(conn, project_id)
             project_dir = _project_dir(settings, project)
             tex_path = _export_target(project_dir, output_name, ".tex")
-            latex_name = resolve_latex_template(template_name)
-            csl_name = "ieee" if latex_name == "ieee" else "apa"
+            latex_name = resolve_latex_template(
+                template_name or resolved_style.export.get("latex_template") or "ieee"
+            )
+            csl_name = "ieee" if latex_name == "ieee" else resolve_csl(resolved_style.citation)
 
             sections = await repository.list_draft_sections(conn, project_id)
-            markdown = _draft_markdown_or_raise(merge_draft_markdown(project_dir, sections))
+            markdown, extra_files = _style_merge_markdown(project_dir, sections, resolved_style)
+            markdown = _draft_markdown_or_raise(markdown)
             missing = await _citation_gate(conn, project_id, markdown, strict_citations)
             bib_path, _csl_json = await _refresh_bibliography(conn, project_id, project_dir)
 
@@ -1045,6 +1073,7 @@ async def export_to_latex(
                     csl_path,
                     tex_path,
                     resource_path=project_dir,
+                    metadata=latex_metadata(resolved_style.formatting),
                 )
 
             pdf_path: Path | None = None
@@ -1054,12 +1083,17 @@ async def export_to_latex(
             return {
                 "output_path": str(pdf_path or tex_path),
                 "format": "latex",
+                "style_id": resolved_style.id,
                 "tex_path": str(tex_path),
                 "pdf_path": str(pdf_path) if pdf_path else None,
-                "template_name": template_name,
+                "template_name": latex_name,
                 "csl_style": csl_name,
                 "cited_but_missing": missing,
-                "warnings": _warnings_for_missing(missing),
+                "warnings": [
+                    *_warnings_for_missing(missing),
+                    *_warnings_for_extra_drafts(extra_files),
+                    *_warnings_for_two_column(resolved_style, latex_name),
+                ],
             }
         finally:
             await conn.close()
