@@ -718,6 +718,17 @@ async def _precondition_failed(conn, project_id: str, style: StyleSpec) -> dict 
     }
 
 
+def _is_bibliography_section(section: SectionSpec) -> bool:
+    """True for outline sections that name the reference list.
+
+    Pandoc Citeproc already appends `# References` via
+    `--metadata reference-section-title=References`, so merging the style's own
+    reference chapter would leave a second, empty heading behind.
+    """
+    headings = {heading.casefold() for heading in wordcraft_bridge.BIBLIOGRAPHY_HEADINGS}
+    return section.title.strip().casefold() in headings or section.id.strip().casefold() in headings
+
+
 def _style_merge_markdown(
     project_dir: Path, sections: list[dict], style: StyleSpec
 ) -> tuple[str, list[str]]:
@@ -726,7 +737,8 @@ def _style_merge_markdown(
     R10: chapters named by the style outline come first in `order` with their
     leading heading normalized to the outline title; every other `drafts/*.md`
     is appended afterwards in filename order, unchanged, and reported as an
-    extra so the user learns it is outside the chosen structure.
+    extra so the user learns it is outside the chosen structure. Outline
+    sections that name the reference list are skipped: Citeproc owns that list.
     """
     drafts_dir = project_dir / "drafts"
     pieces: list[str] = []
@@ -734,6 +746,8 @@ def _style_merge_markdown(
 
     for section in sorted(style.outline, key=lambda item: item.order):
         outline_names.add(section.filename)
+        if _is_bibliography_section(section):
+            continue
         text = _read_draft(drafts_dir / section.filename)
         if text:
             pieces.append(normalize_chapter_markdown(text, section))
