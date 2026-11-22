@@ -2,6 +2,7 @@
 import Base from '../layouts/Base.astro'
 import FeatureCard from '../components/FeatureCard.astro'
 import ConnectorLine from '../components/ConnectorLine.astro'
+import PageHero from '../components/PageHero.astro'
 
 const features = [
   {
@@ -53,23 +54,15 @@ const features = [
   title="Cara Kerja"
   description="Bagaimana Research MCP bekerja — 6 kemampuan inti untuk riset ilmiah end-to-end.">
 
-  <section class="max-w-2xl mx-auto px-6 py-24">
+  <PageHero
+    slug="cara-kerja"
+    titleId="Bagaimana cara kerjanya?"
+    titleEn="How does it work?"
+    descId="Dari pencarian literatur hingga dokumen siap terbit — semua dalam satu alur tanpa keluar dari terminal atau IDE-mu."
+    descEn="From literature search to publish-ready document — all in one workflow without leaving your terminal or IDE."
+  />
 
-    <!-- Section header -->
-    <p class="font-heading text-xs uppercase tracking-widest mb-3"
-      style="color: #C4954A; letter-spacing: 0.18em;"
-      data-id="Kemampuan Inti" data-en="Core Capabilities">
-      Kemampuan Inti
-    </p>
-    <h2 class="font-display text-4xl md:text-5xl mb-4" style="color: #1E130F;"
-      data-id="Bagaimana cara kerjanya?" data-en="How does it work?">
-      Bagaimana cara kerjanya?
-    </h2>
-    <p class="font-body text-lg leading-relaxed mb-16" style="color: #3D2A22;"
-      data-id="Dari pencarian literatur hingga dokumen siap terbit — semua dalam satu alur tanpa keluar dari terminal atau IDE-mu."
-      data-en="From literature search to publish-ready document — all in one workflow without leaving your terminal or IDE.">
-      Dari pencarian literatur hingga dokumen siap terbit — semua dalam satu alur tanpa keluar dari terminal atau IDE-mu.
-    </p>
+  <section class="max-w-2xl mx-auto px-6 pt-12 pb-20">
 
     <!-- Feature list with connector -->
     <div id="feature-list" class="relative">
@@ -89,7 +82,7 @@ const features = [
     <!-- CTA -->
     <div class="mt-16 text-center">
       <a href="/mulai"
-        class="font-heading px-8 py-3.5 rounded-sm transition-colors duration-200 inline-block"
+        class="font-mono px-8 py-3.5 transition-colors duration-200 inline-block"
         style="background-color: #B85C38; color: #FDF8F0;"
         onmouseover="this.style.backgroundColor='#C4954A'"
         onmouseout="this.style.backgroundColor='#B85C38'"

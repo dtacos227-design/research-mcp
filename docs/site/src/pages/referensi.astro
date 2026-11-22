@@ -1,5 +1,6 @@
 ---
 import Base from '../layouts/Base.astro'
+import PageHero from '../components/PageHero.astro'
 
 const tools = [
   { name: 'create_project', descId: 'Buat proyek riset baru dengan direktori terisolasi', descEn: 'Create a new isolated research project', example: 'create_project(name="Skripsi Saya")' },
@@ -45,22 +46,15 @@ const prompts = [
   title="Referensi"
   description="Referensi lengkap 21 tools, 5 resources, dan 4 prompts Research MCP.">
 
-  <section class="max-w-5xl mx-auto px-6 py-24">
+  <PageHero
+    slug="referensi"
+    titleId="Referensi Lengkap"
+    titleEn="Full Reference"
+    descId="21 tools, 5 resources, 4 prompts — semua yang bisa kamu panggil."
+    descEn="21 tools, 5 resources, 4 prompts — everything you can call."
+  />
 
-    <p class="font-heading text-xs uppercase tracking-widest mb-3"
-      style="color: #C4954A; letter-spacing: 0.18em;"
-      data-id="Dokumentasi Teknis" data-en="Technical Documentation">
-      Dokumentasi Teknis
-    </p>
-    <h2 class="font-display text-4xl md:text-5xl mb-4" style="color: #1E130F;"
-      data-id="Referensi Lengkap" data-en="Full Reference">
-      Referensi Lengkap
-    </h2>
-    <p class="font-body text-lg leading-relaxed mb-12" style="color: #3D2A22;"
-      data-id="21 tools, 5 resources, 4 prompts — semua yang bisa kamu panggil."
-      data-en="21 tools, 5 resources, 4 prompts — everything you can call.">
-      21 tools, 5 resources, 4 prompts — semua yang bisa kamu panggil.
-    </p>
+  <section class="max-w-5xl mx-auto px-6 pt-12 pb-20">
 
     <!-- Tab switcher -->
     <div class="flex gap-1 mb-8 border-b" style="border-color: #E8D9BC;">
@@ -70,7 +64,7 @@ const prompts = [
         { id: 'prompts',   labelId: 'Prompts (4)',    labelEn: 'Prompts (4)' },
       ].map((tab, i) => (
         <button
-          class="tab-btn font-heading text-sm px-4 py-2 -mb-px border-b-2 transition-colors"
+          class="tab-btn font-mono text-xs px-4 py-2 -mb-px border-b-2 transition-colors"
           data-tab={tab.id}
           data-id={tab.labelId}
           data-en={tab.labelEn}
@@ -87,11 +81,11 @@ const prompts = [
       <table class="w-full font-body text-sm" style="border-collapse: collapse;">
         <thead>
           <tr style="border-bottom: 2px solid #E8D9BC;">
-            <th class="text-left py-2 pr-4 font-heading" style="color: #1E130F; width: 24%;"
+            <th class="text-left py-2 pr-4 font-mono text-xs" style="color: #1E130F; width: 24%;"
               data-id="Tool" data-en="Tool">Tool</th>
-            <th class="text-left py-2 pr-4 font-heading" style="color: #1E130F; width: 42%;"
+            <th class="text-left py-2 pr-4 font-mono text-xs" style="color: #1E130F; width: 42%;"
               data-id="Deskripsi" data-en="Description">Deskripsi</th>
-            <th class="text-left py-2 font-heading" style="color: #1E130F;"
+            <th class="text-left py-2 font-mono text-xs" style="color: #1E130F;"
               data-id="Contoh" data-en="Example">Contoh</th>
           </tr>
         </thead>
@@ -113,9 +107,9 @@ const prompts = [
       <table class="w-full font-body text-sm" style="border-collapse: collapse;">
         <thead>
           <tr style="border-bottom: 2px solid #E8D9BC;">
-            <th class="text-left py-2 pr-4 font-heading" style="color: #1E130F; width: 40%;"
+            <th class="text-left py-2 pr-4 font-mono text-xs" style="color: #1E130F; width: 40%;"
               data-id="URI" data-en="URI">URI</th>
-            <th class="text-left py-2 font-heading" style="color: #1E130F;"
+            <th class="text-left py-2 font-mono text-xs" style="color: #1E130F;"
               data-id="Deskripsi" data-en="Description">Deskripsi</th>
           </tr>
         </thead>
@@ -136,11 +130,11 @@ const prompts = [
       <table class="w-full font-body text-sm" style="border-collapse: collapse;">
         <thead>
           <tr style="border-bottom: 2px solid #E8D9BC;">
-            <th class="text-left py-2 pr-4 font-heading" style="color: #1E130F; width: 28%;"
+            <th class="text-left py-2 pr-4 font-mono text-xs" style="color: #1E130F; width: 28%;"
               data-id="Prompt" data-en="Prompt">Prompt</th>
-            <th class="text-left py-2 pr-4 font-heading" style="color: #1E130F; width: 24%;"
+            <th class="text-left py-2 pr-4 font-mono text-xs" style="color: #1E130F; width: 24%;"
               data-id="Parameter" data-en="Parameters">Parameter</th>
-            <th class="text-left py-2 font-heading" style="color: #1E130F;"
+            <th class="text-left py-2 font-mono text-xs" style="color: #1E130F;"
               data-id="Deskripsi" data-en="Description">Deskripsi</th>
           </tr>
         </thead>

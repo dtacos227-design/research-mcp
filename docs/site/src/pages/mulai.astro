@@ -1,6 +1,7 @@
 ---
 import Base from '../layouts/Base.astro'
 import StepBlock from '../components/StepBlock.astro'
+import PageHero from '../components/PageHero.astro'
 
 const steps = [
   {
@@ -96,27 +97,20 @@ read_paper_section(
   title="Mulai Pakai"
   description="Panduan langkah demi langkah untuk mulai menggunakan Research MCP — install, konfigurasi, dan cari literatur pertamamu.">
 
-  <section class="max-w-2xl mx-auto px-6 py-24">
+  <PageHero
+    slug="mulai"
+    titleId="Dari nol ke siap riset"
+    titleEn="From zero to research-ready"
+    descId="Empat langkah. Kurang dari 10 menit. Tidak perlu kartu kredit."
+    descEn="Four steps. Under 10 minutes. No credit card required."
+  />
 
-    <p class="font-heading text-xs uppercase tracking-widest mb-3"
-      style="color: #C4954A; letter-spacing: 0.18em;"
-      data-id="Panduan Mulai" data-en="Getting Started">
-      Panduan Mulai
-    </p>
-    <h2 class="font-display text-4xl md:text-5xl mb-4" style="color: #1E130F;"
-      data-id="Dari nol ke siap riset" data-en="From zero to research-ready">
-      Dari nol ke siap riset
-    </h2>
-    <p class="font-body text-lg leading-relaxed mb-16" style="color: #3D2A22;"
-      data-id="Empat langkah. Kurang dari 10 menit. Tidak perlu kartu kredit."
-      data-en="Four steps. Under 10 minutes. No credit card required.">
-      Empat langkah. Kurang dari 10 menit. Tidak perlu kartu kredit.
-    </p>
+  <section class="max-w-2xl mx-auto px-6 pt-12 pb-20">
 
     <!-- Prerequisites badge -->
     <div class="mb-12 p-4 rounded-sm border font-body text-sm"
       style="background-color: #F5EDD8; border-color: #E8D9BC; color: #3D2A22;">
-      <strong class="font-heading" style="color: #1E130F;">Prasyarat: </strong>
+      <strong class="font-mono" style="color: #1E130F;">// prasyarat: </strong>
       <span data-id="Python 3.11+, uv, Pandoc ≥ 3.0 (wajib). Tectonic & WordCraft (opsional)."
         data-en="Python 3.11+, uv, Pandoc ≥ 3.0 (required). Tectonic & WordCraft (optional).">
         Python 3.11+, uv, Pandoc ≥ 3.0 (wajib). Tectonic & WordCraft (opsional).
@@ -146,13 +140,13 @@ read_paper_section(
 
     <!-- Next step hint -->
     <div class="mt-8 text-center">
-      <p class="font-body mb-4" style="color: #3D2A22;"
+      <p class="font-mono text-sm mb-4" style="color: #3D2A22;"
         data-id="Sudah siap? Jelajahi semua 21 tools yang tersedia."
         data-en="Ready? Explore all 21 available tools.">
         Sudah siap? Jelajahi semua 21 tools yang tersedia.
       </p>
       <a href="/referensi"
-        class="font-heading px-6 py-3 rounded-sm transition-colors duration-200 inline-block border"
+        class="font-mono text-sm px-6 py-2.5 transition-colors duration-200 inline-block border"
         style="border-color: #B85C38; color: #B85C38;"
         onmouseover="this.style.backgroundColor='#B85C38'; this.style.color='#FDF8F0'"
         onmouseout="this.style.backgroundColor='transparent'; this.style.color='#B85C38'"

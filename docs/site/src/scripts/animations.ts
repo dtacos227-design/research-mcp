@@ -10,30 +10,6 @@ document.addEventListener('astro:before-swap', () => {
   ScrollTrigger.getAll().forEach(t => t.kill())
 })
 
-export function initHeroAnimation() {
-  if (reduced()) return
-
-  const title = document.getElementById('hero-title')
-  if (!title) return
-
-  const words = title.innerText.split(/\s+/)
-  title.innerHTML = words
-    .map(w => `<span class="inline-block opacity-0 translate-y-8">${w}&nbsp;</span>`)
-    .join('')
-
-  gsap.to('#hero-title span', {
-    opacity: 1,
-    y: 0,
-    stagger: 0.08,
-    duration: 0.65,
-    ease: 'power2.out',
-    delay: 0.15,
-  })
-
-  gsap.from('#hero-sub', { opacity: 0, y: 20, duration: 0.6, delay: 0.9 })
-  gsap.from('#hero-cta', { opacity: 0, y: 20, duration: 0.6, delay: 1.15 })
-  gsap.from('#hero-badges', { opacity: 0, duration: 0.6, delay: 1.4 })
-}
 
 export function initCaraKerjaAnimation() {
   if (reduced()) return
