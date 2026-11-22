@@ -99,10 +99,15 @@ async def test_outline_resource_has_sections(tmp_path, monkeypatch):
     from research_mcp import server as srv
     from research_mcp.db import repository as repo
     from research_mcp.db.database import get_connection
+    from research_mcp.models import ResearchBrief
 
     settings = srv.get_settings()
     conn = await get_connection(settings.db_path)
     project = await repo.create_project(conn, settings.workspace_dir, "OutlineWithSections")
+    brief = ResearchBrief(
+        style_id="article_imrad", title="T", research_question="Q", citation="apa"
+    )
+    await repo.set_project_brief(conn, project.id, brief.model_dump_json(), "article_imrad")
     await conn.close()
     # save a draft section via the tool
     await srv.save_draft_section(

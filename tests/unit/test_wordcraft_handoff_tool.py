@@ -7,8 +7,12 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from research_mcp.config import get_settings
 from research_mcp.db.database import get_connection
-from research_mcp.db.repository import create_project, save_paper_and_sections
-from research_mcp.models import PaperModel
+from research_mcp.db.repository import (
+    create_project,
+    save_paper_and_sections,
+    set_project_brief,
+)
+from research_mcp.models import PaperModel, ResearchBrief
 from research_mcp.server import prepare_wordcraft_handoff, save_draft_section
 
 
@@ -30,6 +34,13 @@ async def _make_project(*, bad_citation: bool, chart: bool = False):
         created_at="2024-01-01T00:00:00Z",
     )
     await save_paper_and_sections(conn, project.id, paper, sections=None)
+    brief = ResearchBrief(
+        style_id="article_imrad",
+        title="T",
+        research_question="Q",
+        citation="apa",
+    )
+    await set_project_brief(conn, project.id, brief.model_dump_json(), "article_imrad")
     await conn.close()
 
     project_dir = settings.workspace_dir / project.slug
@@ -84,9 +95,15 @@ def _skip_polish(monkeypatch):
     monkeypatch.setattr(server, "polish_docx", lambda *args, **kwargs: None)
 
 
+def _skip_docx_formatting(monkeypatch):
+    from research_mcp import server
+
+    monkeypatch.setattr(server, "apply_docx_formatting", lambda *args, **kwargs: None)
+
+
 def _fake_docx_renderer(recorded, payload=b"docx"):
-    def fake(markdown, bib_path, csl_path, reference_doc, output, resource_path=None):
-        recorded.append({"markdown": markdown, "output": output})
+    def fake(markdown, bib_path, csl_path, reference_doc, output, resource_path=None, toc=False):
+        recorded.append({"markdown": markdown, "output": output, "toc": toc})
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(payload)
         return output
@@ -205,6 +222,7 @@ async def test_seed_docx_writes_docx(project_with_drafts, monkeypatch):
     recorded = []
     monkeypatch.setattr(server, "render_docx", _fake_docx_renderer(recorded))
     _skip_polish(monkeypatch)
+    _skip_docx_formatting(monkeypatch)
 
     result = await prepare_wordcraft_handoff(project.id, mode="seed_docx")
 
@@ -223,6 +241,7 @@ async def test_batch_script_writes_job_json(project_with_drafts, monkeypatch):
     project, project_dir = project_with_drafts
     monkeypatch.setattr(server, "render_docx", _fake_docx_renderer([]))
     _skip_polish(monkeypatch)
+    _skip_docx_formatting(monkeypatch)
     monkeypatch.setattr(server.wordcraft_bridge, "detect_wordcraft_cli", lambda *a, **k: None)
 
     result = await prepare_wordcraft_handoff(project.id, mode="batch_script")
@@ -245,6 +264,7 @@ async def test_batch_script_uses_detected_cli(project_with_drafts, monkeypatch):
     project, _project_dir = project_with_drafts
     monkeypatch.setattr(server, "render_docx", _fake_docx_renderer([]))
     _skip_polish(monkeypatch)
+    _skip_docx_formatting(monkeypatch)
     monkeypatch.setattr(
         server.wordcraft_bridge, "detect_wordcraft_cli", lambda *a, **k: Path("/x/wordcraft-cli")
     )
@@ -289,6 +309,31 @@ async def test_empty_draft_rejected(tmp_path, monkeypatch):
     settings = get_settings()
     conn = await get_connection(settings.db_path)
     project = await create_project(conn, settings.workspace_dir, "Empty")
+    await save_paper_and_sections(
+        conn,
+        project.id,
+        PaperModel(
+            id="p-empty",
+            project_id=project.id,
+            citekey="doe2024empty",
+            doi="10.1/empty",
+            title="Empty Paper",
+            authors=["Jane Doe"],
+            authors_structured=[{"given": "Jane", "family": "Doe", "literal": None}],
+            year=2024,
+            venue="Nature",
+            item_type="journal-article",
+            created_at="2024-01-01T00:00:00Z",
+        ),
+        sections=None,
+    )
+    brief = ResearchBrief(
+        style_id="article_imrad",
+        title="T",
+        research_question="Q",
+        citation="apa",
+    )
+    await set_project_brief(conn, project.id, brief.model_dump_json(), "article_imrad")
     await conn.close()
     with pytest.raises(ToolError, match="no draft chapters"):
         await prepare_wordcraft_handoff(project.id)

@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS projects (
     slug TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
     description TEXT,
+    style_id TEXT,
+    brief_json TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -85,20 +87,43 @@ CREATE TABLE IF NOT EXISTS draft_sections (
 """
 
 
-async def _migrate_legacy_schema(conn: aiosqlite.Connection) -> None:
-    """Add columns to a papers table created before these columns existed."""
-    async with conn.execute("PRAGMA table_info(papers)") as cursor:
-        columns = {row[1] async for row in cursor}
+async def _table_columns(conn: aiosqlite.Connection, table: str) -> set[str]:
+    async with conn.execute(f"PRAGMA table_info({table})") as cursor:
+        return {row[1] async for row in cursor}
+
+
+async def _add_missing_columns(
+    conn: aiosqlite.Connection,
+    table: str,
+    additions: dict[str, str],
+) -> None:
+    columns = await _table_columns(conn, table)
     if not columns:
         return
-    additions = {
-        "external_id": "TEXT",
-        "item_type": "TEXT DEFAULT 'other'",
-        "authors_structured_json": "TEXT",
-    }
     for column, column_type in additions.items():
         if column not in columns:
-            await conn.execute(f"ALTER TABLE papers ADD COLUMN {column} {column_type}")
+            await conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")
+
+
+async def _migrate_legacy_schema(conn: aiosqlite.Connection) -> None:
+    """Add columns to tables created before these columns existed."""
+    await _add_missing_columns(
+        conn,
+        "papers",
+        {
+            "external_id": "TEXT",
+            "item_type": "TEXT DEFAULT 'other'",
+            "authors_structured_json": "TEXT",
+        },
+    )
+    await _add_missing_columns(
+        conn,
+        "projects",
+        {
+            "style_id": "TEXT",
+            "brief_json": "TEXT",
+        },
+    )
     await conn.commit()
 
 

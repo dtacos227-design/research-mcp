@@ -29,8 +29,15 @@ def render_latex(
     csl_path: Path,
     output_tex: Path,
     resource_path: Path | None = None,
+    metadata: dict[str, str] | None = None,
+    toc: bool = False,
 ) -> Path:
-    """Render merged Markdown to a standalone `.tex` document via Pandoc + Citeproc."""
+    """Render merged Markdown to a standalone `.tex` document via Pandoc + Citeproc.
+
+    `metadata` maps Pandoc template variables (for example `geometry`,
+    `linestretch`, `fontsize`) to their values, so a style can drive page layout
+    without editing the bundled template.
+    """
     output_tex.parent.mkdir(parents=True, exist_ok=True)
     args = [
         detect_pandoc(),
@@ -41,8 +48,10 @@ def render_latex(
         "latex",
         "--standalone",
         "--citeproc",
+        *(["--toc"] if toc else []),
         "--metadata",
         "reference-section-title=References",
+        *_metadata_args(metadata),
         "--bibliography",
         str(bib_path),
         "--csl",
@@ -63,6 +72,16 @@ def _resource_args(resource_path: Path | None) -> list[str]:
     if resource_path is None:
         return []
     return ["--resource-path", str(resource_path)]
+
+
+def _metadata_args(metadata: dict[str, str] | None) -> list[str]:
+    """Flatten a metadata mapping into repeated `--metadata key=value` pairs."""
+    if not metadata:
+        return []
+    args: list[str] = []
+    for key, value in metadata.items():
+        args.extend(["--metadata", f"{key}={value}"])
+    return args
 
 
 _TEX_SPECIALS = {

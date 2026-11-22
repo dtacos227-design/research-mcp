@@ -83,6 +83,68 @@ def test_render_docx_builds_pandoc_argv(tmp_path, monkeypatch):
     assert _pair(args, "-o") == str(output)
 
 
+def test_render_docx_adds_toc_when_requested(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_run_pandoc(args, input_text=None):
+        calls.append(args)
+
+    monkeypatch.setattr(pandoc_engine, "run_pandoc", fake_run_pandoc)
+    monkeypatch.setattr(pandoc_engine, "detect_pandoc", lambda: "pandoc")
+
+    render_docx(
+        "body",
+        tmp_path / "references.bib",
+        tmp_path / "apa.csl",
+        tmp_path / "reference.docx",
+        tmp_path / "out.docx",
+        toc=True,
+    )
+
+    assert "--toc" in calls[0]
+
+
+def test_render_latex_adds_toc_when_requested(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_run_pandoc(args, input_text=None):
+        calls.append(args)
+
+    monkeypatch.setattr(latex_engine, "run_pandoc", fake_run_pandoc)
+    monkeypatch.setattr(latex_engine, "detect_pandoc", lambda: "pandoc")
+
+    render_latex(
+        "body",
+        tmp_path / "ieee.tex",
+        tmp_path / "references.bib",
+        tmp_path / "ieee.csl",
+        tmp_path / "out.tex",
+        toc=True,
+    )
+
+    assert "--toc" in calls[0]
+
+
+def test_render_without_toc_omits_the_flag(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_run_pandoc(args, input_text=None):
+        calls.append(args)
+
+    monkeypatch.setattr(pandoc_engine, "run_pandoc", fake_run_pandoc)
+    monkeypatch.setattr(pandoc_engine, "detect_pandoc", lambda: "pandoc")
+
+    render_docx(
+        "body",
+        tmp_path / "references.bib",
+        tmp_path / "apa.csl",
+        tmp_path / "reference.docx",
+        tmp_path / "out.docx",
+    )
+
+    assert "--toc" not in calls[0]
+
+
 def test_render_latex_builds_pandoc_argv(tmp_path, monkeypatch):
     calls = []
 

@@ -4,14 +4,15 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from research_mcp.config import get_settings
 from research_mcp.db.database import get_connection
-from research_mcp.db.repository import create_project, save_paper_and_sections
-from research_mcp.models import PaperModel
+from research_mcp.db.repository import create_project, save_paper_and_sections, set_project_brief
+from research_mcp.models import PaperModel, ResearchBrief
 from research_mcp.server import (
     export_to_docx,
     export_to_latex,
     export_to_markdown_bundle,
     save_draft_section,
 )
+from research_mcp.styles.registry import get_style
 
 
 @pytest_asyncio.fixture
@@ -37,6 +38,13 @@ async def project_with_drafts(tmp_path, monkeypatch):
         created_at="2024-01-01T00:00:00Z",
     )
     await save_paper_and_sections(conn, project.id, paper, sections=None)
+    brief = ResearchBrief(
+        style_id="article_imrad",
+        title="Export Project",
+        research_question="Does the export merge drafts in order?",
+        citation="apa",
+    )
+    await set_project_brief(conn, project.id, brief.model_dump_json(), "article_imrad")
     await conn.close()
 
     await save_draft_section(project.id, "01_abstract.md", "# Abstract\n\nAbs body.")
@@ -77,10 +85,64 @@ async def test_markdown_bundle_merges_all_chapters(project_with_drafts, monkeypa
     output = workspace_root / project.slug / "exports" / "paper.md"
     assert result["output_path"] == str(output)
     assert result["format"] == "markdown"
+    assert result["style_id"] == "article_imrad"
+    assert result["csl_style"] == "apa"
+    assert result["warnings"] == [
+        "Exported draft(s) not in the style outline: 01_abstract.md, 02_intro.md"
+    ]
     merged = recorded[0]["markdown"]
     assert "Abs body." in merged
     assert "Intro body [@doe2024valid]." in merged
     assert merged.index("Abs body.") < merged.index("Intro body")
+
+
+@pytest.mark.asyncio
+async def test_markdown_bundle_without_brief_is_blocked(tmp_path, monkeypatch):
+    workspace_root = tmp_path / "workspaces"
+    monkeypatch.setenv("RESEARCH_MCP_WORKSPACE", str(workspace_root))
+    monkeypatch.setenv("RESEARCH_MCP_DB_PATH", str(tmp_path / "research_mcp.db"))
+    settings = get_settings()
+    conn = await get_connection(settings.db_path)
+    try:
+        project = await create_project(conn, settings.workspace_dir, "No Brief")
+    finally:
+        await conn.close()
+    recorded = []
+    from research_mcp import server
+
+    monkeypatch.setattr(server, "render_markdown", _fake_render_engine(recorded))
+
+    result = await export_to_markdown_bundle(project.id, "paper")
+
+    assert result.get("status") == "precondition_failed"
+    assert result["style_id"] == "article_imrad"
+    assert "brief" in str(result["failed"]).lower()
+    assert result["remediation"]
+    assert recorded == []
+    assert not (workspace_root / project.slug / "exports" / "paper.md").exists()
+
+
+@pytest.mark.asyncio
+async def test_markdown_bundle_uses_the_style_merge_and_drops_guidance(
+    project_with_drafts, monkeypatch
+):
+    project, _workspace_root = project_with_drafts
+    await save_draft_section(
+        project.id,
+        "00_abstract.md",
+        "# Abstract\n\n<!-- guidance: never export this -->\n\nSkeleton-stripped body.",
+    )
+    recorded = []
+    from research_mcp import server
+
+    monkeypatch.setattr(server, "render_markdown", _fake_render_engine(recorded))
+
+    await export_to_markdown_bundle(project.id, "paper")
+
+    merged = recorded[0]["markdown"]
+    assert "Skeleton-stripped body." in merged
+    assert "guidance:" not in merged
+    assert "<!--" not in merged
 
 
 @pytest.mark.asyncio
@@ -105,10 +167,16 @@ async def test_docx_export_writes_docx_and_refreshes_bibliography(project_with_d
     project, workspace_root = project_with_drafts
     recorded = []
     polished = []
+    formatted = []
     from research_mcp import server
 
     monkeypatch.setattr(server, "render_docx", _fake_render_engine(recorded))
     monkeypatch.setattr(server, "polish_docx", lambda path, title: polished.append((path, title)))
+    monkeypatch.setattr(
+        server,
+        "apply_docx_formatting",
+        lambda path, fmt: formatted.append((path, fmt)),
+    )
 
     result = await export_to_docx(project.id, "thesis")
 
@@ -116,9 +184,16 @@ async def test_docx_export_writes_docx_and_refreshes_bibliography(project_with_d
     assert output.exists()
     assert result["output_path"] == str(output)
     assert result["format"] == "docx"
+    assert result["style_id"] == "article_imrad"
+    assert result["csl_style"] == "apa"
     assert result["cited_but_missing"] == []
-    assert result["warnings"] == []
+    # The fixture's 01_abstract/02_intro predate the style outline, so R10 keeps
+    # them in the export but honestly reports them as extras.
+    assert result["warnings"] == [
+        "Exported draft(s) not in the style outline: 01_abstract.md, 02_intro.md"
+    ]
     assert polished == [(output, project.name)]
+    assert formatted == [(output, get_style("article_imrad").formatting)]
     assert recorded[0]["resource_path"] == workspace_root / project.slug
     bib_text = (workspace_root / project.slug / "references.bib").read_text()
     assert "doe2024valid" in bib_text
@@ -135,6 +210,7 @@ async def test_non_strict_export_reports_missing_citekeys(project_with_drafts, m
 
     monkeypatch.setattr(server, "render_docx", _fake_render_engine(recorded))
     monkeypatch.setattr(server, "polish_docx", lambda path, title: None)
+    monkeypatch.setattr(server, "apply_docx_formatting", lambda path, fmt: None)
 
     result = await export_to_docx(project.id, "thesis", strict_citations=False)
 
@@ -150,13 +226,21 @@ async def test_latex_export_reports_tex_and_pdf_paths(project_with_drafts, monke
     from research_mcp import server
 
     def fake_render_latex(
-        markdown, template_path, bib_path, csl_path, output_tex, resource_path=None
+        markdown,
+        template_path,
+        bib_path,
+        csl_path,
+        output_tex,
+        resource_path=None,
+        metadata=None,
+        toc=False,
     ):
         recorded.append(
             {
                 "markdown": markdown,
                 "template": template_path,
                 "resource_path": resource_path,
+                "metadata": metadata,
             }
         )
         output_tex.parent.mkdir(parents=True, exist_ok=True)
@@ -178,6 +262,9 @@ async def test_latex_export_reports_tex_and_pdf_paths(project_with_drafts, monke
     assert result["output_path"] == result["pdf_path"]
     assert "Intro body" in recorded[0]["markdown"]
     assert str(recorded[0]["template"]).endswith("article_id.tex")
+    metadata = recorded[0]["metadata"]
+    assert metadata
+    assert "geometry" in metadata
 
 
 @pytest.mark.asyncio

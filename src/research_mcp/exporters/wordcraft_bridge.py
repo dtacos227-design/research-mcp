@@ -18,6 +18,14 @@ from pathlib import Path
 
 from mcp.server.mcpserver.exceptions import ToolError
 
+from research_mcp.exporters import formatting
+from research_mcp.styles.models import (
+    FormattingSpec,
+    StyleSpec,
+    is_toc_text,
+    style_toc_section,
+)
+
 DEFAULT_PORT = 7981
 WORDCRAFT_AUTHOR = "Research Agent"
 CLI_NAME = "wordcraft-cli"
@@ -239,6 +247,21 @@ _ORDERED_RE = re.compile(r"^\s*\d+[.)]\s+")
 _FENCE_RE = re.compile(r"^```(?P<language>[\w+-]*)\s*$")
 _TABLE_SEPARATOR_RE = re.compile(r"^\s*\|?[\s:|-]+\|[\s:|-]*$")
 
+# Markdown debris that Pandoc/Citeproc leaves behind and WordCraft would type
+# verbatim: thematic breaks, fenced-div markers, `#id`/`.class` attribute blocks
+# and CommonMark backslash escapes. Lists are stripped per item, so every
+# pattern here has to be line-scoped.
+_THEMATIC_BREAK_RE = re.compile(
+    r"^[ \t]*(?:-[ \t]*){3,}$|^[ \t]*(?:\*[ \t]*){3,}$|^[ \t]*(?:_[ \t]*){3,}$"
+)
+_DIV_FENCE_RE = re.compile(r"^[ \t]*:{3,}.*$")
+_INLINE_DIV_RE = re.compile(r"[ \t]*:{3,}[ \t]*")
+# Only blocks that look like Pandoc attributes (`{#id}`, `{.class}`, `{k=v}`)
+# are removed, so an escaped literal set such as `\{1, 2\}` survives intact.
+_ATTRIBUTE_BLOCK_RE = re.compile(r"[ \t]*\{(?=[^}\n]*[#.=])[^{}\n]*\}")
+_BACKSLASH_ESCAPE_RE = re.compile(r"\\([!-/:-@\[-`{-~])")
+_SPACE_RUN_RE = re.compile(r"[ \t]{2,}")
+
 _CSL_TO_WORDCRAFT = {
     "apa": "APA",
     "ieee": "IEEE",
@@ -366,66 +389,145 @@ def _execute(command: str, params: dict | None = None) -> dict:
     return {"tool": "execute", "arguments": {"command": command, "params": params or {}}}
 
 
-def _style_steps() -> list[dict]:
+# Every block closes its paragraph: WordCraft types into the open paragraph, so
+# without this a heading, table or list runs into the preceding text.
+_NEW_PARA = _execute("text.newParagraph")
+
+
+def _strip_md_inline(text: str) -> str:
+    """Remove Markdown artefacts Pandoc leaves in text WordCraft will type.
+
+    Drops thematic-break lines and fenced-div ``:::`` markers, unwraps Pandoc
+    attribute blocks (``{#refs .csl-bib-body}``), and undoes CommonMark
+    backslash escapes (``\\<``, ``\\>``, ``\\~``) so headings and body text read
+    as plain prose in the document.
+    """
+    kept: list[str] = []
+    for line in text.splitlines():
+        if _THEMATIC_BREAK_RE.match(line) or _DIV_FENCE_RE.match(line):
+            continue
+        kept.append(_INLINE_DIV_RE.sub(" ", line))
+    cleaned = _ATTRIBUTE_BLOCK_RE.sub("", "\n".join(kept))
+    cleaned = _BACKSLASH_ESCAPE_RE.sub(r"\1", cleaned)
+    cleaned = _SPACE_RUN_RE.sub(" ", cleaned)
+    return cleaned.strip()
+
+
+def _style_steps(fmt: FormattingSpec | None = None) -> list[dict]:
+    """Style definitions, delegated to the shared `formatting` translation."""
+    return formatting.wordcraft_style_steps(fmt or FormattingSpec())
+
+
+def _page_setup_steps(fmt: FormattingSpec) -> list[dict]:
+    """Paper size, margins, page numbers and columns for one section.
+
+    Page setup is emitted right after the style definitions and before any
+    content, so the document is already A4/Letter with the style's margins and
+    numbering when the first heading is typed.
+    """
     return [
-        _execute(
-            "styles.modify",
-            {
-                "style": "Normal",
-                "chr": {"font": "Times New Roman", "size": 12},
-                "para": {"lineSpacing": {"rule": "multiple", "value": 1.5}, "spaceAfter": 6},
-            },
-        ),
-        _execute(
-            "styles.modify",
-            {
-                "style": "Heading1",
-                "chr": {"font": "Times New Roman", "size": 16, "bold": True},
-                "para": {"spaceBefore": 12, "spaceAfter": 6, "keepNext": True},
-            },
-        ),
-        _execute(
-            "styles.modify",
-            {
-                "style": "Heading2",
-                "chr": {"font": "Times New Roman", "size": 14, "bold": True},
-                "para": {"spaceBefore": 12, "spaceAfter": 4, "keepNext": True},
-            },
-        ),
-        _execute(
-            "styles.modify",
-            {
-                "style": "Heading3",
-                "chr": {"font": "Times New Roman", "size": 12, "bold": True},
-                "para": {"spaceBefore": 10, "spaceAfter": 4, "keepNext": True},
-            },
-        ),
+        *formatting.wordcraft_page_steps(fmt),
+        *formatting.wordcraft_column_steps(fmt),
     ]
+
+
+def _style_warnings(style: StyleSpec) -> list[str]:
+    """Note the style fields WordCraft cannot enforce by itself.
+
+    WordCraft expresses paper size, margins, spacing, fonts, page numbering and
+    two-column layout directly (``layout.*``/``styles.modify``). Heading
+    numbering is different: the engine keeps whatever heading text it is given,
+    so ``BAB I``/``1.1`` prefixes come from the draft (via
+    `normalize_chapter_markdown`), never from WordCraft itself.
+    """
+    fmt = style.formatting
+    if fmt.heading_numbering not in {"roman_bab", "numeric_bab"}:
+        return []
+    return [
+        f"WordCraft does not apply heading numbering ({fmt.heading_numbering}): it keeps "
+        "each outline heading exactly as written, so there is no automatic BAB I/1.1 "
+        "renumbering. Number the headings in the draft (Research MCP does this from the "
+        "style outline) before handoff."
+    ]
+
+
+def _style_has_toc(style: StyleSpec | None) -> bool:
+    return style is not None and style_toc_section(style) is not None
+
+
+def _insert_toc(blocks: list[dict], style: StyleSpec | None) -> list[dict]:
+    """Replace a style's table-of-contents section with a generated TOC block.
+
+    The outline's "Daftar Isi"/"Contents" chapter is a placeholder: WordCraft
+    generates the real TOC with ``references.toc``. The heading and any skeleton
+    body are dropped so the document does not end up with an empty heading in
+    front of the generated list.
+    """
+    if not _style_has_toc(style):
+        return blocks
+    result: list[dict] = []
+    skipping = False
+    for block in blocks:
+        if block["kind"] == "heading":
+            if is_toc_text(block["text"]):
+                result.append({"kind": "toc", "title": block["text"]})
+                skipping = True
+                continue
+            skipping = False
+        if skipping:
+            continue
+        result.append(block)
+    return result
 
 
 def _block_steps(block: dict) -> list[dict]:
     kind = block["kind"]
+    if kind == "toc":
+        return [
+            _execute("references.toc", {"levels": 3, "title": block.get("title") or "Contents"}),
+            _execute("caret.docEnd"),
+            _NEW_PARA,
+        ]
     if kind == "heading":
         level = block["level"]
-        typed = {"tool": "type_text", "arguments": {"text": block["text"]}}
+        text = _strip_md_inline(block["text"])
+        if not text:
+            return [_NEW_PARA]
+        typed = {"tool": "type_text", "arguments": {"text": text}}
         if level <= 3:
-            return [typed, _execute(f"para.heading{level}")]
+            return [typed, _execute(f"para.heading{level}"), _NEW_PARA]
         return [
             typed,
-            _execute("para.set", {"props": {"style": f"Heading{level}"}}),
+            _execute("para.set", {"props": {"style": f"Heading {level}"}}),
+            _NEW_PARA,
         ]
     if kind == "paragraph":
-        return [{"tool": "type_text", "arguments": {"text": block["text"], "paragraphs": True}}]
+        text = _strip_md_inline(block["text"])
+        if not text:
+            return [_NEW_PARA]
+        return [
+            {"tool": "type_text", "arguments": {"text": text, "paragraphs": True}},
+            _NEW_PARA,
+        ]
     if kind == "table":
         values = [block["header"], *block["rows"]]
-        return [{"tool": "insert_table", "arguments": {"values": values, "header": True}}]
+        return [
+            {"tool": "insert_table", "arguments": {"values": values, "header": True}},
+            # The caret stays inside the last cell, so leave the table first: a
+            # paragraph break there would put the next block inside the table.
+            _execute("caret.docEnd"),
+            _NEW_PARA,
+        ]
     if kind == "list":
+        items = [item for item in map(_strip_md_inline, block["items"]) if item]
+        if not items:
+            return [_NEW_PARA]
         step = {
             "tool": "type_text",
-            "arguments": {"text": "\n".join(block["items"]), "paragraphs": True},
+            "arguments": {"text": "\n".join(items), "paragraphs": True},
         }
         command = "para.numbering" if block["ordered"] else "para.bullets"
-        return [step, _execute(command)]
+        return [step, _execute(command), _NEW_PARA]
     if kind == "figure":
         return [
             {
@@ -434,9 +536,13 @@ def _block_steps(block: dict) -> list[dict]:
                     "command": "insert.picture",
                     "params": {"path": block["path"], "alt": block["alt"]},
                 },
-            }
+            },
+            _NEW_PARA,
         ]
-    return [{"tool": "type_text", "arguments": {"text": block["text"], "paragraphs": True}}]
+    return [
+        {"tool": "type_text", "arguments": {"text": block["text"], "paragraphs": True}},
+        _NEW_PARA,
+    ]
 
 
 BIBLIOGRAPHY_HEADINGS = ("references", "bibliography", "daftar pustaka", "referensi")
@@ -475,14 +581,18 @@ def split_bibliography(blocks: list[dict]) -> tuple[list[dict], dict]:
 
 
 def _bibliography_steps(bibliography: dict) -> list[dict]:
-    entries = bibliography["markdown"].strip()
+    entries = _strip_md_inline(bibliography["markdown"])
     if not entries:
         return []
     return [
         {"tool": "type_text", "arguments": {"text": bibliography["title"]}},
         _execute("para.heading1"),
         {"tool": "type_text", "arguments": {"text": entries, "paragraphs": True}},
+        # The entries are generated content: jump to the end and start a fresh
+        # paragraph so whatever follows (strict report, page render, save) never
+        # appends to the last reference entry.
         _execute("caret.docEnd"),
+        _NEW_PARA,
     ]
 
 
@@ -496,23 +606,35 @@ def build_blueprint(
     output_stem: str,
     *,
     project_dir: Path | None = None,
+    style: StyleSpec | None = None,
 ) -> dict:
-    """Turn Citeproc-rendered Markdown into blocks plus the WordCraft calls that write them."""
+    """Turn Citeproc-rendered Markdown into blocks plus the WordCraft calls that write them.
+
+    With `style`, the sequence opens with that style's Normal/Heading definitions
+    and page setup (paper size, margins, page numbers, columns) before any content,
+    and `warnings` names the fields WordCraft cannot enforce itself. Without it the
+    default A4/Times format is used, exactly as before.
+    """
     root = project_dir or (exports_dir.parent if exports_dir.name == "exports" else exports_dir)
     parsed = parse_markdown_blocks(markdown, root)
     blocks, bibliography = split_bibliography(parsed)
+    blocks = _insert_toc(blocks, style)
     warnings = [
         f"Figure path does not exist: {block['path']}"
         for block in blocks
         if block["kind"] == "figure" and not block["exists"]
     ]
 
+    fmt = style.formatting if style is not None else None
     steps: list[dict] = [
         {"tool": "new_document", "arguments": {"template": "blank"}},
         _execute("file.setAuthor", {"name": WORDCRAFT_AUTHOR}),
-        *_style_steps(),
+        *_style_steps(fmt),
+        *(_page_setup_steps(fmt) if fmt is not None else []),
         _execute("references.citationStyle", {"style": citation_style_for(csl_style)}),
     ]
+    if style is not None:
+        warnings.extend(_style_warnings(style))
     for block in blocks:
         steps.extend(_block_steps(block))
     steps.extend(_bibliography_steps(bibliography))
@@ -592,13 +714,22 @@ def build_polish_sequence(
     csl_style: str,
     exports_dir: Path,
     output_stem: str,
+    *,
+    style: StyleSpec | None = None,
 ) -> list[dict]:
-    """The WordCraft calls that polish a seed DOCX: styles, TOC, strict check, save."""
+    """The WordCraft calls that polish a seed DOCX: styles, TOC, strict check, save.
+
+    With `style`, its page setup (paper size, margins, page numbers, columns) is
+    applied right after the style definitions and before the TOC, so the seed
+    document is re-laid out to the style rather than staying at its own defaults.
+    """
+    fmt = style.formatting if style is not None else None
     return [
         {"tool": "open_document", "arguments": {"path": str(seed_docx)}},
         {"tool": "inspect_document", "arguments": {}},
         _execute("file.setAuthor", {"name": WORDCRAFT_AUTHOR}),
-        *_style_steps(),
+        *_style_steps(fmt),
+        *(_page_setup_steps(fmt) if fmt is not None else []),
         _execute("references.citationStyle", {"style": citation_style_for(csl_style)}),
         _execute("references.toc", {"levels": 3, "title": "Contents"}),
         _execute("caret.docEnd"),

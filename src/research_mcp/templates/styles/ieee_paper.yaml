@@ -1,0 +1,83 @@
+id: ieee_paper
+label: Artikel Konferensi IEEE
+description: >-
+  Artikel konferensi dua kolom bergaya IEEE; spasi tunggal, font 10 pt, sitasi IEEE.
+  EN: Two-column IEEE conference paper; single spacing, 10 pt type, IEEE citations.
+citation: ieee
+export:
+  docx_template: default_academic
+  latex_template: ieee
+guidance: >-
+  Gunakan gaya ini untuk artikel konferensi IEEE: abstrak satu paragraf, badan dua kolom,
+  dan seluruh sitasi bernomor sesuai urutan kemunculan.
+  EN: Use this style for IEEE conference papers: a one-paragraph abstract, a two-column
+  body, and numbered citations in order of first appearance.
+formatting:
+  paper_size: Letter
+  margin_cm: {top: 1.9, right: 1.59, bottom: 2.54, left: 1.59}
+  line_spacing: 1.0
+  justify: true
+  font_family: Times New Roman
+  font_size_pt: 10
+  heading_numbering: none
+  page_number_position: footer_center
+  page_number_format: decimal
+  two_column: true
+outline:
+  - id: abstract
+    title: Abstract
+    filename: 00_abstract.md
+    order: 1
+    kind: front_matter
+    guidance: >-
+      Satu paragraf 150-250 kata tanpa sitasi; sebutkan masalah, metode, hasil, dan dampak.
+      EN: One paragraph of 150-250 words with no citations; state problem, method, results, impact.
+  - id: introduction
+    title: Introduction
+    filename: 01_introduction.md
+    order: 2
+    guidance: >-
+      Motivasi, posisi terhadap karya sebelumnya, dan kontribusi yang dinyatakan eksplisit.
+      EN: Motivation, position against prior work, and explicitly stated contributions.
+  - id: related_work
+    title: Related Work
+    filename: 02_related_work.md
+    order: 3
+    guidance: >-
+      Kelompokkan studi sebelumnya secara tematik dan tunjukkan celah yang Anda isi.
+      EN: Group prior studies thematically and show the gap your work fills.
+  - id: method
+    title: Method
+    filename: 03_method.md
+    order: 4
+    guidance: >-
+      Uraikan arsitektur, algoritme, atau desain eksperimen beserta justifikasi tiap pilihan.
+      EN: Describe the architecture, algorithm, or experiment design with a rationale per choice.
+  - id: results
+    title: Results
+    filename: 04_results.md
+    order: 5
+    guidance: >-
+      Laporkan metrik dan tabel perbandingan; sebutkan kondisi pengujian secara lengkap.
+      EN: Report metrics and comparison tables; state the experimental conditions in full.
+  - id: discussion
+    title: Discussion
+    filename: 05_discussion.md
+    order: 6
+    guidance: >-
+      Jelaskan mengapa hasil muncul, bandingkan dengan baseline, dan akui batasan studi.
+      EN: Explain why the results occurred, compare with baselines, and acknowledge study limits.
+  - id: conclusion
+    title: Conclusion
+    filename: 06_conclusion.md
+    order: 7
+    guidance: >-
+      Ringkas temuan dalam satu paragraf dan usulkan langkah penelitian berikutnya.
+      EN: Summarize the findings in one paragraph and propose the next research steps.
+  - id: references
+    title: References
+    filename: 07_references.md
+    order: 8
+    guidance: >-
+      Daftar referensi bernomor IEEE dari bibliography proyek; jangan menyunting manual.
+      EN: Numbered IEEE reference list generated from the project bibliography; do not edit by hand.

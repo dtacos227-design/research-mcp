@@ -56,6 +56,11 @@ def _resource_args(resource_path: Path | None) -> list[str]:
     return ["--resource-path", str(resource_path)]
 
 
+def _toc_args(toc: bool) -> list[str]:
+    """Ask Pandoc to generate a table of contents at the start of the document."""
+    return ["--toc"] if toc else []
+
+
 def _read_draft(path: Path) -> str | None:
     if not path.is_file():
         return None
@@ -119,6 +124,7 @@ def render_docx(
     reference_doc: Path,
     output: Path,
     resource_path: Path | None = None,
+    toc: bool = False,
 ) -> Path:
     """Render merged Markdown to `.docx` via Pandoc + Citeproc."""
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -130,6 +136,7 @@ def render_docx(
         "--to",
         "docx",
         "--citeproc",
+        *_toc_args(toc),
         "--metadata",
         "reference-section-title=References",
         "--bibliography",

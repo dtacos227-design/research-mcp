@@ -80,7 +80,8 @@ async def create_project(
 
 async def get_project(conn: aiosqlite.Connection, project_id: str) -> ProjectModel:
     async with conn.execute(
-        "SELECT id, slug, name, description, created_at, updated_at FROM projects WHERE id = ?",
+        "SELECT id, slug, name, description, style_id, created_at, updated_at"
+        " FROM projects WHERE id = ?",
         (project_id,),
     ) as cursor:
         row = await cursor.fetchone()
@@ -93,9 +94,55 @@ async def get_project(conn: aiosqlite.Connection, project_id: str) -> ProjectMod
         slug=row[1],
         name=row[2],
         description=row[3] or "",
-        created_at=row[4],
-        updated_at=row[5],
+        style_id=row[4],
+        created_at=row[5],
+        updated_at=row[6],
     )
+
+
+async def set_project_brief(
+    conn: aiosqlite.Connection,
+    project_id: str,
+    brief_json: str,
+    style_id: str,
+) -> None:
+    """Persist a project's research brief JSON together with the style it was built for."""
+    await get_project(conn, project_id)
+    await conn.execute(
+        "UPDATE projects SET brief_json = ?, style_id = ?, updated_at = ? WHERE id = ?",
+        (brief_json, style_id, datetime.now(UTC).isoformat(), project_id),
+    )
+    await conn.commit()
+
+
+async def get_project_brief(
+    conn: aiosqlite.Connection,
+    project_id: str,
+) -> dict | None:
+    """Return the stored brief as a dict, or None when the project has no brief yet."""
+    await get_project(conn, project_id)
+    async with conn.execute(
+        "SELECT brief_json FROM projects WHERE id = ?",
+        (project_id,),
+    ) as cursor:
+        row = await cursor.fetchone()
+    if row is None or row[0] is None:
+        return None
+    return json.loads(row[0])
+
+
+async def set_project_style(
+    conn: aiosqlite.Connection,
+    project_id: str,
+    style_id: str | None,
+) -> None:
+    """Point a project at a research style, or clear it when style_id is None."""
+    await get_project(conn, project_id)
+    await conn.execute(
+        "UPDATE projects SET style_id = ?, updated_at = ? WHERE id = ?",
+        (style_id, datetime.now(UTC).isoformat(), project_id),
+    )
+    await conn.commit()
 
 
 async def list_projects(conn: aiosqlite.Connection) -> list[dict]:
@@ -103,7 +150,7 @@ async def list_projects(conn: aiosqlite.Connection) -> list[dict]:
     # product cannot inflate either count.
     async with conn.execute(
         """
-        SELECT p.id, p.slug, p.name, p.description, p.created_at, p.updated_at,
+        SELECT p.id, p.slug, p.name, p.description, p.style_id, p.created_at, p.updated_at,
                (SELECT COUNT(*) FROM papers WHERE project_id = p.id) AS paper_count,
                (SELECT COUNT(*) FROM draft_sections WHERE project_id = p.id) AS draft_count
         FROM projects p
@@ -118,11 +165,12 @@ async def list_projects(conn: aiosqlite.Connection) -> list[dict]:
                 slug=r[1],
                 name=r[2],
                 description=r[3] or "",
-                created_at=r[4],
-                updated_at=r[5],
+                style_id=r[4],
+                created_at=r[5],
+                updated_at=r[6],
             ).model_dump(),
-            "paper_count": r[6],
-            "draft_count": r[7],
+            "paper_count": r[7],
+            "draft_count": r[8],
         }
         for r in rows
     ]

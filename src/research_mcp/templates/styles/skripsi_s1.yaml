@@ -1,0 +1,103 @@
+id: skripsi_s1
+label: Skripsi S1 (Indonesia)
+description: >-
+  Skripsi program sarjana Indonesia; A4, margin 4 cm kiri dan 3 cm lainnya, spasi ganda,
+  penomoran bab romawi.
+  EN: Indonesian undergraduate thesis; A4, 4 cm left and 3 cm other margins, double spacing,
+  Roman chapter numbering.
+citation: apa
+export:
+  docx_template: default_academic
+  latex_template: article_id
+guidance: >-
+  Gunakan gaya ini untuk skripsi S1: bagian awal (sampul sampai daftar isi) memakai angka
+  romawi kecil, lalu lima bab utama dengan penomoran BAB I sampai BAB V.
+  EN: Use this style for an Indonesian undergraduate thesis: front matter (cover to table of
+  contents) uses lowercase Roman numerals, followed by five main chapters numbered BAB I-V.
+formatting:
+  paper_size: A4
+  margin_cm: {top: 3.0, right: 3.0, bottom: 3.0, left: 4.0}
+  line_spacing: 2.0
+  justify: true
+  font_family: Times New Roman
+  font_size_pt: 12
+  heading_numbering: roman_bab
+  page_number_position: footer_center
+  page_number_format: lowerRoman
+  two_column: false
+outline:
+  - id: cover
+    title: Sampul
+    filename: 00_cover.md
+    order: 1
+    kind: front_matter
+    guidance: >-
+      Judul, nama penulis, program studi, fakultas, dan tahun; tanpa nomor halaman.
+      EN: Title, author name, study program, faculty, and year; no page number on the cover.
+  - id: pengesahan
+    title: Lembar Pengesahan
+    filename: 01_pengesahan.md
+    order: 2
+    kind: front_matter
+    guidance: >-
+      Halaman tanda tangan pembimbing dan penguji sesuai format resmi kampus.
+      EN: Signature page for supervisors and examiners using the official campus format.
+  - id: abstrak
+    title: Abstrak
+    filename: 02_abstrak.md
+    order: 3
+    kind: front_matter
+    guidance: >-
+      Abstrak 200-250 kata dengan kata kunci, disusul versi bahasa Inggris (Abstract).
+      EN: A 200-250 word abstract with keywords, followed by an English-language Abstract.
+  - id: kata_pengantar
+    title: Kata Pengantar
+    filename: 03_kata_pengantar.md
+    order: 4
+    kind: front_matter
+    guidance: >-
+      Ucapan syukur dan terima kasih secara formal; hindari nada berlebihan atau personal.
+      EN: Formal acknowledgements of support; avoid overly personal or effusive language.
+  - id: daftar_isi
+    title: Daftar Isi
+    filename: 04_daftar_isi.md
+    order: 5
+    kind: front_matter
+    guidance: >-
+      Daftar isi, daftar tabel, daftar gambar, dan daftar lampiran dibuat otomatis dari heading.
+      EN: Table of contents, list of tables, figures, and appendices generated from the headings.
+  - id: bab1_pendahuluan
+    title: BAB I Pendahuluan
+    filename: 10_bab1_pendahuluan.md
+    order: 10
+    guidance: >-
+      Latar belakang, rumusan masalah, tujuan, manfaat, dan batasan penelitian.
+      EN: Background, problem statement, objectives, significance, and scope of the study.
+  - id: bab2_tinjauan_pustaka
+    title: BAB II Tinjauan Pustaka
+    filename: 11_bab2_tinjauan_pustaka.md
+    order: 11
+    guidance: >-
+      Landasan teori, penelitian terdahulu, dan kerangka berpikir yang memunculkan hipotesis.
+      EN: Theoretical foundation, prior studies, and the conceptual framework behind hypotheses.
+  - id: bab3_metode
+    title: BAB III Metode Penelitian
+    filename: 12_bab3_metode_penelitian.md
+    order: 12
+    guidance: >-
+      Jenis penelitian, populasi dan sampel, instrumen, prosedur pengumpulan, dan analisis data.
+      EN: Research type, population and sample, instruments, collection procedure, and data analysis.
+  - id: bab4_hasil
+    title: BAB IV Hasil dan Pembahasan
+    filename: 13_bab4_hasil_pembahasan.md
+    order: 13
+    guidance: >-
+      Sajikan hasil pengolahan data lalu bahas terhadap teori dan penelitian sebelumnya.
+      EN: Present the analysed results, then discuss them against theory and prior research.
+  - id: bab5_kesimpulan
+    title: BAB V Kesimpulan dan Saran
+    filename: 14_bab5_kesimpulan_saran.md
+    order: 14
+    guidance: >-
+      Kesimpulan yang menjawab rumusan masalah, keterbatasan, dan saran untuk penelitian lanjutan.
+      EN: Conclusions answering the problem statement, limitations, and suggestions for future work.
