@@ -1,0 +1,35 @@
+---
+interface Props {
+  icon: string
+  titleId: string
+  titleEn: string
+  descId: string
+  descEn: string
+  number: number
+}
+const { icon, titleId, titleEn, descId, descEn, number } = Astro.props
+const num = String(number).padStart(2, '0')
+---
+
+<div class="feature-card opacity-0 relative pl-14 py-6"
+  style="transform: translateX(-30px);">
+  <!-- Circle icon -->
+  <div class="absolute left-0 -translate-x-1/2 w-10 h-10 rounded-full flex items-center justify-center"
+    style="background-color: #F5EDD8; border: 2px solid #C4954A;">
+    <svg viewBox="0 0 24 24" class="w-5 h-5" fill="none" stroke="#C4954A" stroke-width="1.5">
+      <path d={icon} stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </div>
+
+  <span class="font-mono text-xs" style="color: #C4954A;">{num}</span>
+
+  <h3 class="font-heading text-xl mt-1 mb-2" style="color: #1E130F;"
+    data-id={titleId} data-en={titleEn}>
+    {titleId}
+  </h3>
+
+  <p class="font-body leading-relaxed" style="color: #3D2A22;"
+    data-id={descId} data-en={descEn}>
+    {descId}
+  </p>
+</div>
