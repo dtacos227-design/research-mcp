@@ -24,6 +24,25 @@ def test_slr_prompt_contains_workflow_steps():
         assert needle in text, f"Missing needle: {needle!r}"
 
 
+def test_slr_prompt_uses_the_real_article_imrad_filenames():
+    text = server.systematic_literature_review("machine learning", 2020)
+    for filename in [
+        "00_abstract.md",
+        "01_introduction.md",
+        "02_methods.md",
+        "03_results.md",
+        "04_discussion.md",
+        "05_conclusion.md",
+        "06_references.md",
+    ]:
+        assert filename in text, f"Missing style filename: {filename!r}"
+    assert "02_methodology.md" not in text
+    assert "03_findings.md" not in text
+    # The prompt must point at the registry rather than claim a hardcoded outline.
+    assert "get_research_style" in text
+    assert "outline" in text
+
+
 def test_slr_prompt_no_format_injection():
     # curly braces in topic must not raise
     text = server.systematic_literature_review("{evil}", 2020)

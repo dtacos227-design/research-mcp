@@ -1855,17 +1855,21 @@ For each paper you decide to include:
 
 ## Step 4 — Write the draft
 
-Write each chapter as a separate Markdown file using `[@citekey]` citations. The
-filename and order of every chapter come from the chosen style's `outline`; the
-default IMRaD-style example is:
-1. `save_draft_section(project_id, "00_abstract.md", content, order=0)`
-2. `save_draft_section(project_id, "01_introduction.md", content, order=1)`
-3. `save_draft_section(project_id, "02_methodology.md", content, order=2)` —
+Write each chapter as a separate Markdown file using `[@citekey]` citations.
+Never guess a filename: copy each `filename` and `order` from the chosen style's
+`outline` (returned by `get_research_style(style_id)`). For `article_imrad` the
+outline is:
+1. `save_draft_section(project_id, "00_abstract.md", content, order=1)`
+2. `save_draft_section(project_id, "01_introduction.md", content, order=2)`
+3. `save_draft_section(project_id, "02_methods.md", content, order=3)` —
    search strategy, inclusion/exclusion criteria.
-4. `save_draft_section(project_id, "03_findings.md", content, order=3)` —
+4. `save_draft_section(project_id, "03_results.md", content, order=4)` —
    synthesise across papers.
-5. `save_draft_section(project_id, "04_discussion.md", content, order=4)`
-6. `save_draft_section(project_id, "05_conclusion.md", content, order=5)`
+5. `save_draft_section(project_id, "04_discussion.md", content, order=5)`
+6. `save_draft_section(project_id, "05_conclusion.md", content, order=6)`
+7. `06_references.md` — do NOT type reference entries by hand: Pandoc Citeproc
+   appends the final reference list from the project bibliography, and the
+   exporter skips this skeleton's empty heading.`
 
 ## Step 5 — Verify and export
 
