@@ -6,6 +6,7 @@ description: >-
   EN: Eight-part research proposal from background to budget; A4, 2.5 cm margins, 1.5 spacing,
   APA citations.
 citation: apa
+bibliography_title: DAFTAR PUSTAKA
 export:
   docx_template: default_academic
   latex_template: article_id

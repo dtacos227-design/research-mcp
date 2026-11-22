@@ -606,7 +606,9 @@ async def generate_chart(
             project = await repository.get_project(conn, project_id)
         finally:
             await conn.close()
-        assets = run_chart(_project_dir(settings, project), filename, python_code, dpi)
+        assets = await asyncio.to_thread(
+            run_chart, _project_dir(settings, project), filename, python_code, dpi
+        )
         return {"assets": assets, "dpi": dpi}
     except ToolError:
         raise
@@ -891,7 +893,8 @@ async def _render_docx_export(
         bundled_template(f"csl/{csl_name}.csl") as csl_path,
         bundled_template(f"docx/{docx_name}.docx") as reference_doc,
     ):
-        render_docx(
+        await asyncio.to_thread(
+            render_docx,
             markdown,
             bib_path,
             csl_path,
@@ -899,6 +902,7 @@ async def _render_docx_export(
             output,
             resource_path=project_dir,
             toc=toc,
+            reference_section_title=style.bibliography_title,
         )
     apply_docx_formatting(output, style.formatting)
     if polish:
@@ -1208,7 +1212,8 @@ async def export_to_latex(
                 bundled_template(f"csl/{csl_name}.csl") as csl_path,
                 bundled_template(f"latex/{latex_name}.tex") as template_path,
             ):
-                latex_engine.render_latex(
+                await asyncio.to_thread(
+                    latex_engine.render_latex,
                     markdown,
                     template_path,
                     bib_path,
@@ -1221,7 +1226,9 @@ async def export_to_latex(
 
             pdf_path: Path | None = None
             if compile_pdf:
-                pdf_path = latex_engine.compile_pdf(tex_path, tex_path.parent)
+                pdf_path = await asyncio.to_thread(
+                    latex_engine.compile_pdf, tex_path, tex_path.parent
+                )
 
             return {
                 "output_path": str(pdf_path or tex_path),
@@ -1296,7 +1303,15 @@ async def export_to_markdown_bundle(
             bib_path, _csl_json = await _refresh_bibliography(conn, project_id, project_dir)
 
             with bundled_template(f"csl/{csl_name}.csl") as csl_path:
-                render_markdown(markdown, bib_path, csl_path, output, resource_path=project_dir)
+                await asyncio.to_thread(
+                    render_markdown,
+                    markdown,
+                    bib_path,
+                    csl_path,
+                    output,
+                    resource_path=project_dir,
+                    reference_section_title=resolved_style.bibliography_title,
+                )
 
             return {
                 "output_path": str(output),
@@ -1517,12 +1532,14 @@ async def prepare_wordcraft_handoff(
                 csl_name = resolve_csl(effective_csl)
                 bib_path, _csl_json = await _refresh_bibliography(conn, project.id, project_dir)
                 with bundled_template(f"csl/{csl_name}.csl") as csl_path:
-                    render_markdown(
+                    await asyncio.to_thread(
+                        render_markdown,
                         markdown,
                         bib_path,
                         csl_path,
                         output,
                         resource_path=project_dir,
+                        reference_section_title=resolved_style.bibliography_title,
                     )
                 rendered = output.read_text(encoding="utf-8")
                 assets = _project_assets(project_dir)

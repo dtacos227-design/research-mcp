@@ -84,7 +84,7 @@ async def test_markdown_bundle_warns_that_it_has_no_generated_toc(tmp_path, monk
     )
     recorded: list[str] = []
 
-    def fake_render_markdown(markdown, bib_path, csl_path, output, resource_path=None):
+    def fake_render_markdown(markdown, bib_path, csl_path, output, resource_path=None, **kwargs):
         recorded.append(markdown)
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(markdown, encoding="utf-8")

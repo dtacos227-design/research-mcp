@@ -2,6 +2,7 @@ import urllib.parse
 
 import httpx
 
+from research_mcp.config import get_settings
 from research_mcp.providers.base import (
     LiteratureProvider,
     SearchResult,
@@ -49,13 +50,14 @@ def _map_paper(paper: dict) -> SearchResult:
 
 
 async def _get_json(path: str, params: dict[str, str | int]) -> dict:
+    email = get_settings().email
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await request_with_retry(
             client,
             "GET",
             f"{SEMANTIC_SCHOLAR_BASE_URL}{path}",
             params=params,
-            headers=polite_headers(None),
+            headers=polite_headers(email),
         )
     return response.json()
 

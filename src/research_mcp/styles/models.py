@@ -82,6 +82,7 @@ class StyleSpec(BaseModel):
     citation: str = "apa"
     export: dict[str, str] = Field(default_factory=dict)
     guidance: str = ""
+    bibliography_title: str = "References"
 
     @model_validator(mode="after")
     def _validate_unique_outline_filenames(self) -> "StyleSpec":

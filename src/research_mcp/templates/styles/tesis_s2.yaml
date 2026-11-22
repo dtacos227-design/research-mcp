@@ -6,6 +6,7 @@ description: >-
   EN: Indonesian master's thesis; A4, 4 cm left and 3 cm other margins, double spacing,
   with richer front matter than the undergraduate thesis.
 citation: apa
+bibliography_title: DAFTAR PUSTAKA
 export:
   docx_template: default_academic
   latex_template: article_id

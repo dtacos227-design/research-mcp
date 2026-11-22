@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import os
 import re
@@ -28,6 +29,7 @@ from research_mcp.parsers.pdf_extractor import (
 )
 from research_mcp.parsers.sectionizer import SectionData, sectionize_markdown
 from research_mcp.providers.aggregator import search_all
+from research_mcp.providers.arxiv import ARXIV
 from research_mcp.providers.base import SearchResult, UnpaywallResult, normalize_doi
 from research_mcp.providers.crossref import get_bibtex, get_by_doi
 from research_mcp.providers.unpaywall import get_oa_location
@@ -35,10 +37,36 @@ from research_mcp.providers.unpaywall import get_oa_location
 SEARCH_SOURCES = ["openalex", "semantic_scholar", "arxiv", "pubmed", "crossref"]
 MAX_IDENTIFIER_SEARCH_RESULTS = 50
 _DOI_PREFIX = re.compile(r"^10\.\S+$")
+# Modern ("2304.08069") and legacy ("hep-th/9901001") arXiv ids, with the
+# optional version suffix that the arXiv API always reports back.
+_ARXIV_ID = re.compile(
+    r"^(?P<base>\d{4}\.\d{4,5}|[a-z][a-z\-]*(?:\.[A-Z]{2})?/\d{7})(?:v\d+)?$", re.IGNORECASE
+)
 
 
 class IngestionError(Exception):
     """Raised when a paper identifier cannot be resolved or ingested."""
+
+
+def _strip_arxiv_prefix(identifier: str) -> str:
+    value = identifier.strip()
+    if value.upper().startswith("ARXIV:"):
+        value = value.split(":", 1)[1].strip()
+    return value
+
+
+def _arxiv_base_id(value: str) -> str | None:
+    match = _ARXIV_ID.match(value)
+    return match.group("base") if match else None
+
+
+def _same_identifier(candidate: SearchResult, query: str, arxiv_base: str | None) -> bool:
+    """Match ids that differ only by an arXiv version suffix ("...v5")."""
+    if arxiv_base is not None and _arxiv_base_id(candidate.external_id or "") == arxiv_base:
+        return True
+    if candidate.external_id == query:
+        return True
+    return bool(candidate.doi) and normalize_doi(candidate.doi) == normalize_doi(query)
 
 
 async def resolve_identifier(identifier: str) -> SearchResult:
@@ -54,9 +82,18 @@ async def resolve_identifier(identifier: str) -> SearchResult:
             raise IngestionError(f"Crossref has no metadata for DOI {identifier!r}.")
         return result
 
-    query_identifier = identifier.strip()
-    if query_identifier.upper().startswith("ARXIV:"):
-        query_identifier = query_identifier.split(":", 1)[1]
+    query_identifier = _strip_arxiv_prefix(identifier)
+    arxiv_base = _arxiv_base_id(query_identifier)
+    if arxiv_base is not None:
+        # A direct id lookup is exact and avoids burning multi-provider quota.
+        try:
+            direct = await ARXIV.fetch_by_id(arxiv_base)
+        except Exception:
+            direct = None
+        if direct is not None:
+            return direct
+        query_identifier = arxiv_base
+
     outcome = await search_all(
         query_identifier,
         SEARCH_SOURCES,
@@ -65,7 +102,11 @@ async def resolve_identifier(identifier: str) -> SearchResult:
         limit=MAX_IDENTIFIER_SEARCH_RESULTS,
     )
     result = next(
-        (candidate for candidate in outcome.results if candidate.external_id == query_identifier),
+        (
+            candidate
+            for candidate in outcome.results
+            if _same_identifier(candidate, query_identifier, arxiv_base)
+        ),
         None,
     )
     if result is None:
@@ -194,14 +235,44 @@ def _write_markdown(path: Path, project_dir: Path, markdown: str) -> Path:
     return resolved_path
 
 
+_HEADING_LINE = re.compile(r"^#{1,3}[ \t]+(.+)$", re.MULTILINE)
+_NON_TITLE_HEADINGS = ("abstract", "introduction", "contents", "keywords", "daftar isi")
+
+
+def _slug(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.casefold())
+
+
+def _looks_like_file_stem(title: str | None, stem: str) -> bool:
+    """True when a PDF title is missing, single-word, or the file name itself."""
+    if not title:
+        return True
+    return _slug(title) == _slug(stem) or " " not in title.strip()
+
+
+def _title_from_markdown(markdown: str | None) -> str | None:
+    """Use the document's own leading heading when the PDF has no title metadata."""
+    if not markdown:
+        return None
+    for match in _HEADING_LINE.finditer(markdown[:4000]):
+        text = re.sub(r"[*_`]+", "", match.group(1)).strip()
+        if len(text) < 8 or text.casefold().startswith(_NON_TITLE_HEADINGS):
+            continue
+        return text
+    return None
+
+
 def _metadata_from_local_pdf(
     pdf_metadata: PdfMetadata,
     file_path: Path,
     doi: str | None,
     crossref: SearchResult | None,
     digest: str,
+    markdown: str | None = None,
 ) -> SearchResult:
     title = (crossref.title if crossref and crossref.title else None) or pdf_metadata.title
+    if _looks_like_file_stem(title, file_path.stem):
+        title = _title_from_markdown(markdown) or title
     if not title:
         title = file_path.stem or "Untitled paper"
     authors = crossref.authors if crossref and crossref.authors else []
@@ -312,7 +383,7 @@ async def ingest_remote_paper(
                 artifact_stem = f"{remote_paper_id}-{digest}"
                 new_pdf_path = project_pdf_dir / f"{artifact_stem}.pdf"
                 new_markdown_path = project_dir / "parsed" / f"{artifact_stem}.md"
-                markdown = extract_markdown(staging_path, project_dir)
+                markdown = await asyncio.to_thread(extract_markdown, staging_path, project_dir)
                 parsed_sections = sectionize_markdown(markdown)
                 if not markdown.strip() or not parsed_sections:
                     warnings.append("PDF downloaded but no extractable text sections were found.")
@@ -391,7 +462,7 @@ async def ingest_local_pdf(
     project = await get_project(conn, project_id)
     project_dir = _project_directory(workspace, project.slug)
     source = file_path.expanduser().resolve()
-    digest = _hash_file(source)
+    digest = await asyncio.to_thread(_hash_file, source)
 
     crossref_metadata: SearchResult | None = None
     warnings: list[str] = []
@@ -422,17 +493,13 @@ async def ingest_local_pdf(
     existing = existing_doi or existing_local
     pdf_path = Path(existing.pdf_path) if existing and existing.pdf_path else local_destination
     pdf_existed = pdf_path.exists()
-    import_pdf(source, pdf_path, project_dir)
-    pdf_metadata = extract_pdf_metadata(pdf_path, project_dir)
-    metadata = _metadata_from_local_pdf(
-        pdf_metadata, source, normalized_doi, crossref_metadata, digest
-    )
-    bibtex = await _get_bibtex(metadata.doi, warnings)
-
+    await asyncio.to_thread(import_pdf, source, pdf_path, project_dir)
+    pdf_metadata = await asyncio.to_thread(extract_pdf_metadata, pdf_path, project_dir)
     sections: list[SectionData] | None
     markdown_path = project_dir / "parsed" / f"{pdf_path.stem}.md"
+    markdown = ""
     try:
-        markdown = extract_markdown(pdf_path, project_dir)
+        markdown = await asyncio.to_thread(extract_markdown, pdf_path, project_dir)
         sections = sectionize_markdown(markdown) if markdown.strip() else None
         if sections:
             markdown_existed = markdown_path.exists()
@@ -444,6 +511,11 @@ async def ingest_local_pdf(
         sections = None
         markdown_existed = markdown_path.exists()
         warnings.append(f"PDF imported but parsing failed: {type(exc).__name__}: {exc}")
+
+    metadata = _metadata_from_local_pdf(
+        pdf_metadata, source, normalized_doi, crossref_metadata, digest, markdown or None
+    )
+    bibtex = await _get_bibtex(metadata.doi, warnings)
 
     paper = await _make_paper(
         conn,

@@ -43,6 +43,21 @@ def _to_result(entry: ET.Element) -> SearchResult:
 class ArxivProvider(LiteratureProvider):
     name = "arxiv"
 
+    async def fetch_by_id(self, arxiv_id: str) -> SearchResult | None:
+        """Look a single arXiv id up directly instead of full-text searching for it."""
+        params: dict[str, str | int] = {"id_list": arxiv_id, "max_results": 1}
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+            response = await request_with_retry(client, "GET", ARXIV_API_URL, params=params)
+        root = ET.fromstring(response.text)
+        entries = root.findall("atom:entry", NS)
+        if not entries:
+            return None
+        result = _to_result(entries[0])
+        # The API answers an unknown id with an "Error" entry instead of an empty feed.
+        if not result.title or result.title.lower() == "error":
+            return None
+        return result
+
     async def search(
         self, query: str, year_from: int | None, year_to: int | None, limit: int
     ) -> list[SearchResult]:

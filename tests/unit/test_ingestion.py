@@ -163,7 +163,7 @@ async def test_unpaywall_without_oa_pdf_saves_metadata_only(db, monkeypatch: pyt
 
 
 @pytest.mark.asyncio
-async def test_arxiv_identifier_requires_exact_external_id_and_downloads_arxiv_pdf(
+async def test_arxiv_identifier_matches_versioned_external_id_and_downloads_pdf(
     db, monkeypatch: pytest.MonkeyPatch
 ):
     conn, project, workspace, _ = db
@@ -173,6 +173,10 @@ async def test_arxiv_identifier_requires_exact_external_id_and_downloads_arxiv_p
         doi=None,
         title="Attention Is All You Need",
         pdf_url="https://export.arxiv.org/pdf/1706.03762v7",
+    )
+    monkeypatch.setattr(
+        "research_mcp.parsers.ingestion.ARXIV.fetch_by_id",
+        AsyncMock(return_value=None),
     )
     monkeypatch.setattr(
         "research_mcp.parsers.ingestion.search_all",

@@ -92,6 +92,7 @@ def render_markdown(
     csl_path: Path,
     output: Path,
     resource_path: Path | None = None,
+    reference_section_title: str = "References",
 ) -> Path:
     """Render merged Markdown through Citeproc and write a self-contained `.md`."""
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -104,7 +105,7 @@ def render_markdown(
         "markdown",
         "--citeproc",
         "--metadata",
-        "reference-section-title=References",
+        f"reference-section-title={reference_section_title}",
         "--bibliography",
         str(bib_path),
         "--csl",
@@ -125,6 +126,7 @@ def render_docx(
     output: Path,
     resource_path: Path | None = None,
     toc: bool = False,
+    reference_section_title: str = "References",
 ) -> Path:
     """Render merged Markdown to `.docx` via Pandoc + Citeproc."""
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -138,7 +140,7 @@ def render_docx(
         "--citeproc",
         *_toc_args(toc),
         "--metadata",
-        "reference-section-title=References",
+        f"reference-section-title={reference_section_title}",
         "--bibliography",
         str(bib_path),
         "--csl",

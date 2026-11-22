@@ -65,7 +65,7 @@ def _numbering_warnings(warnings: list[str]) -> list[str]:
 
 
 def _fake_markdown_renderer(recorded):
-    def fake(markdown, bib_path, csl_path, output, resource_path=None):
+    def fake(markdown, bib_path, csl_path, output, resource_path=None, **kwargs):
         recorded.append(markdown)
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(markdown, encoding="utf-8")
@@ -75,7 +75,9 @@ def _fake_markdown_renderer(recorded):
 
 
 def _fake_docx_renderer(recorded):
-    def fake(markdown, bib_path, csl_path, reference_doc, output, resource_path=None, toc=False):
+    def fake(
+        markdown, bib_path, csl_path, reference_doc, output, resource_path=None, toc=False, **kwargs
+    ):
         recorded.append(markdown)
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(b"docx")

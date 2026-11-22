@@ -6,6 +6,7 @@ description: >-
   EN: Indonesian undergraduate thesis; A4, 4 cm left and 3 cm other margins, double spacing,
   Roman chapter numbering.
 citation: apa
+bibliography_title: DAFTAR PUSTAKA
 export:
   docx_template: default_academic
   latex_template: article_id
