@@ -24,9 +24,24 @@ def test_style_outline_is_ordered_and_unique(style_id):
     spec = registry.get_style(style_id)
     assert spec.outline
     orders = [s.order for s in spec.outline]
-    assert orders == sorted(orders)
+    assert all(a < b for a, b in zip(orders, orders[1:], strict=False))
     filenames = [s.filename for s in spec.outline]
     assert len(filenames) == len(set(filenames))
+
+
+@pytest.mark.parametrize("style_id", sorted(EXPECTED))
+def test_guidance_is_bilingual(style_id):
+    spec = registry.get_style(style_id)
+    assert "EN:" in spec.guidance, f"{style_id} guidance lacks an EN: summary"
+    for section in spec.outline:
+        assert "EN:" in section.guidance, f"{style_id}/{section.id} lacks an EN: summary"
+
+
+def test_ieee_paper_uses_two_column_ieee_layout():
+    spec = registry.get_style("ieee_paper")
+    assert spec.formatting.two_column is True
+    assert spec.formatting.line_spacing == 1.0
+    assert spec.citation == "ieee"
 
 
 def test_skripsi_has_front_matter_and_five_bab():
