@@ -1,0 +1,197 @@
+---
+import Base from '../layouts/Base.astro'
+
+const tools = [
+  { name: 'create_project', descId: 'Buat proyek riset baru dengan direktori terisolasi', descEn: 'Create a new isolated research project', example: 'create_project(name="Skripsi Saya")' },
+  { name: 'list_projects', descId: 'Daftar semua proyek beserta jumlah paper dan draf', descEn: 'List all projects with paper and draft counts', example: 'list_projects()' },
+  { name: 'get_project_status', descId: 'Status lengkap proyek: path, sitasi, draf, grafik, ekspor', descEn: 'Full project status: paths, citations, drafts, assets, exports', example: 'get_project_status(project_id="my-project")' },
+  { name: 'search_papers', descId: 'Pencarian paralel multi-sumber dengan deduplikasi otomatis', descEn: 'Parallel multi-source search with automatic deduplication', example: 'search_papers(query="BERT NLP", sources=["openalex","arxiv"], limit=10)' },
+  { name: 'get_citation_graph', descId: 'Telusuri referensi/sitasi paper maju dan mundur', descEn: 'Traverse paper references/citations forward and backward', example: 'get_citation_graph(identifier="10.1234/...", direction="citations")' },
+  { name: 'resolve_doi', descId: 'Metadata resmi & cek ketersediaan PDF legal via Unpaywall', descEn: 'Official metadata & legal PDF availability check via Unpaywall', example: 'resolve_doi(doi="10.18653/v1/2020.acl-main.656")' },
+  { name: 'save_paper_to_project', descId: 'Simpan metadata, generate citekey, unduh dan parsing PDF', descEn: 'Save metadata, generate citekey, download and parse PDF', example: 'save_paper_to_project(project_id="p1", identifier="10.1234/...", download_pdf=True)' },
+  { name: 'import_local_pdf', descId: 'Impor PDF lokal (misalnya dari akses kampus) ke proyek', descEn: 'Import a local PDF (e.g. from campus access) into project', example: 'import_local_pdf(project_id="p1", file_path="/path/to/paper.pdf")' },
+  { name: 'list_paper_sections', descId: 'Daftar heading dan jumlah kata per bagian paper yang telah diparsing', descEn: 'List headings and word count per section of a parsed paper', example: 'list_paper_sections(project_id="p1", citekey="devlin2019bert")' },
+  { name: 'read_paper_section', descId: 'Baca satu bagian paper tanpa memuat seluruh PDF ke konteks', descEn: 'Read one paper section without loading the full PDF into context', example: 'read_paper_section(project_id="p1", citekey="devlin2019bert", section_name="Methods")' },
+  { name: 'search_local_library', descId: 'Pencarian teks penuh lintas semua PDF proyek via SQLite FTS5', descEn: 'Full-text search across all project PDFs via SQLite FTS5', example: 'search_local_library(project_id="p1", query="attention mechanism")' },
+  { name: 'generate_bibliography', descId: 'Bangun ulang references.bib dan references.csl.json', descEn: 'Rebuild references.bib and references.csl.json', example: 'generate_bibliography(project_id="p1", formats=["bibtex","csl_json"])' },
+  { name: 'verify_citations', descId: 'Gate anti-halusinasi: audit [@citekey] pada draf vs database lokal', descEn: 'Anti-hallucination gate: audit [@citekey] in draft vs local database', example: 'verify_citations(project_id="p1", markdown_text="...[@devlin2019bert]...")' },
+  { name: 'save_draft_section', descId: 'Simpan atau perbarui bab draf Markdown per proyek', descEn: 'Save or update a Markdown draft chapter per project', example: 'save_draft_section(project_id="p1", filename="02_intro.md", content="...", order=2)' },
+  { name: 'read_draft_section', descId: 'Baca isi bab draf tertentu', descEn: 'Read the contents of a specific draft chapter', example: 'read_draft_section(project_id="p1", filename="02_intro.md")' },
+  { name: 'generate_chart', descId: 'Jalankan skrip Matplotlib/Seaborn → 300 DPI PNG/SVG di assets/', descEn: 'Run Matplotlib/Seaborn script → 300 DPI PNG/SVG in assets/', example: 'generate_chart(project_id="p1", filename="fig1.png", python_code="...")' },
+  { name: 'check_wordcraft_env', descId: 'Periksa ketersediaan wordcraft-cli dan status desktop WordCraft', descEn: 'Check wordcraft-cli availability and WordCraft desktop status', example: 'check_wordcraft_env(project_id="p1")' },
+  { name: 'prepare_wordcraft_handoff', descId: 'Siapkan paket handoff terverifikasi untuk WordCraft (3 mode)', descEn: 'Prepare verified handoff package for WordCraft (3 modes)', example: 'prepare_wordcraft_handoff(project_id="p1", mode="live_authoring")' },
+  { name: 'export_to_docx', descId: 'Ekspor ke .docx via Pandoc Citeproc + python-docx', descEn: 'Export to .docx via Pandoc Citeproc + python-docx', example: 'export_to_docx(project_id="p1", output_name="thesis", csl_style="apa")' },
+  { name: 'export_to_latex', descId: 'Render template .tex dan kompilasi .pdf opsional via Tectonic', descEn: 'Render .tex template and optionally compile .pdf via Tectonic', example: 'export_to_latex(project_id="p1", output_name="paper", template_name="ieee", compile_pdf=True)' },
+  { name: 'export_to_markdown_bundle', descId: 'Gabungkan semua bab menjadi satu Markdown utuh dengan daftar pustaka', descEn: 'Combine all chapters into one Markdown file with bibliography', example: 'export_to_markdown_bundle(project_id="p1", output_name="full_draft")' },
+]
+
+const resources = [
+  { name: 'research://projects', descId: 'Daftar JSON semua proyek riset', descEn: 'JSON list of all research projects' },
+  { name: 'research://templates', descId: 'Template CSL, DOCX, dan LaTeX yang tersedia', descEn: 'Available CSL, DOCX, and LaTeX templates' },
+  { name: 'research://project/{id}/bibliography', descId: 'Isi references.bib terkini proyek', descEn: 'Current project references.bib contents' },
+  { name: 'research://project/{id}/csl-json', descId: 'Isi references.csl.json terkini proyek', descEn: 'Current project references.csl.json contents' },
+  { name: 'research://project/{id}/outline', descId: 'Urutan bab draf beserta statistik kata', descEn: 'Draft chapter outline with word count statistics' },
+]
+
+const prompts = [
+  { name: 'systematic_literature_review', params: 'topic, year_from', descId: 'Panduan SLR lengkap: pencarian → parsing → draf → ekspor', descEn: 'Full SLR workflow: search → parse → draft → export' },
+  { name: 'draft_latex_paper', params: 'project_id, template_name', descId: 'Panduan draf IMRaD → LaTeX → Tectonic PDF', descEn: 'IMRaD draft → LaTeX → Tectonic PDF workflow guide' },
+  { name: 'write_in_wordcraft', params: 'project_id, csl_style, target_filename', descId: 'Workflow lintas-MCP: Research MCP → WordCraft MCP', descEn: 'Cross-MCP workflow: Research MCP → WordCraft MCP' },
+  { name: 'peer_review_in_wordcraft', params: 'project_id, docx_path', descId: 'Audit dokumen di WordCraft dengan track changes', descEn: 'Audit document in WordCraft with tracked changes' },
+]
+---
+
+<Base
+  title="Referensi"
+  description="Referensi lengkap 21 tools, 5 resources, dan 4 prompts Research MCP.">
+
+  <section class="max-w-5xl mx-auto px-6 py-24">
+
+    <p class="font-heading text-xs uppercase tracking-widest mb-3"
+      style="color: #C4954A; letter-spacing: 0.18em;"
+      data-id="Dokumentasi Teknis" data-en="Technical Documentation">
+      Dokumentasi Teknis
+    </p>
+    <h2 class="font-display text-4xl md:text-5xl mb-4" style="color: #1E130F;"
+      data-id="Referensi Lengkap" data-en="Full Reference">
+      Referensi Lengkap
+    </h2>
+    <p class="font-body text-lg leading-relaxed mb-12" style="color: #3D2A22;"
+      data-id="21 tools, 5 resources, 4 prompts — semua yang bisa kamu panggil."
+      data-en="21 tools, 5 resources, 4 prompts — everything you can call.">
+      21 tools, 5 resources, 4 prompts — semua yang bisa kamu panggil.
+    </p>
+
+    <!-- Tab switcher -->
+    <div class="flex gap-1 mb-8 border-b" style="border-color: #E8D9BC;">
+      {[
+        { id: 'tools',     labelId: 'Tools (21)',     labelEn: 'Tools (21)' },
+        { id: 'resources', labelId: 'Resources (5)',  labelEn: 'Resources (5)' },
+        { id: 'prompts',   labelId: 'Prompts (4)',    labelEn: 'Prompts (4)' },
+      ].map((tab, i) => (
+        <button
+          class="tab-btn font-heading text-sm px-4 py-2 -mb-px border-b-2 transition-colors"
+          data-tab={tab.id}
+          data-id={tab.labelId}
+          data-en={tab.labelEn}
+          style={i === 0
+            ? 'border-color: #C4954A; color: #C4954A;'
+            : 'border-color: transparent; color: #3D2A22;'}>
+          {tab.labelId}
+        </button>
+      ))}
+    </div>
+
+    <!-- Tools table -->
+    <div id="panel-tools" class="ref-panel">
+      <table class="w-full font-body text-sm" style="border-collapse: collapse;">
+        <thead>
+          <tr style="border-bottom: 2px solid #E8D9BC;">
+            <th class="text-left py-2 pr-4 font-heading" style="color: #1E130F; width: 24%;"
+              data-id="Tool" data-en="Tool">Tool</th>
+            <th class="text-left py-2 pr-4 font-heading" style="color: #1E130F; width: 42%;"
+              data-id="Deskripsi" data-en="Description">Deskripsi</th>
+            <th class="text-left py-2 font-heading" style="color: #1E130F;"
+              data-id="Contoh" data-en="Example">Contoh</th>
+          </tr>
+        </thead>
+        <tbody>
+          {tools.map(t => (
+            <tr class="ref-row opacity-0" style="border-bottom: 1px solid #E8D9BC; transform: translateY(8px);">
+              <td class="py-3 pr-4 font-mono text-xs align-top" style="color: #B85C38;">{t.name}</td>
+              <td class="py-3 pr-4 align-top" style="color: #3D2A22;"
+                data-id={t.descId} data-en={t.descEn}>{t.descId}</td>
+              <td class="py-3 align-top font-mono text-xs" style="color: #4A6741;">{t.example}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Resources table -->
+    <div id="panel-resources" class="ref-panel hidden">
+      <table class="w-full font-body text-sm" style="border-collapse: collapse;">
+        <thead>
+          <tr style="border-bottom: 2px solid #E8D9BC;">
+            <th class="text-left py-2 pr-4 font-heading" style="color: #1E130F; width: 40%;"
+              data-id="URI" data-en="URI">URI</th>
+            <th class="text-left py-2 font-heading" style="color: #1E130F;"
+              data-id="Deskripsi" data-en="Description">Deskripsi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {resources.map(r => (
+            <tr class="ref-row opacity-0" style="border-bottom: 1px solid #E8D9BC; transform: translateY(8px);">
+              <td class="py-3 pr-4 font-mono text-xs align-top" style="color: #B85C38;">{r.name}</td>
+              <td class="py-3 align-top" style="color: #3D2A22;"
+                data-id={r.descId} data-en={r.descEn}>{r.descId}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Prompts table -->
+    <div id="panel-prompts" class="ref-panel hidden">
+      <table class="w-full font-body text-sm" style="border-collapse: collapse;">
+        <thead>
+          <tr style="border-bottom: 2px solid #E8D9BC;">
+            <th class="text-left py-2 pr-4 font-heading" style="color: #1E130F; width: 28%;"
+              data-id="Prompt" data-en="Prompt">Prompt</th>
+            <th class="text-left py-2 pr-4 font-heading" style="color: #1E130F; width: 24%;"
+              data-id="Parameter" data-en="Parameters">Parameter</th>
+            <th class="text-left py-2 font-heading" style="color: #1E130F;"
+              data-id="Deskripsi" data-en="Description">Deskripsi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {prompts.map(p => (
+            <tr class="ref-row opacity-0" style="border-bottom: 1px solid #E8D9BC; transform: translateY(8px);">
+              <td class="py-3 pr-4 font-mono text-xs align-top" style="color: #B85C38;">{p.name}</td>
+              <td class="py-3 pr-4 font-mono text-xs align-top" style="color: #3D2A22;">{p.params}</td>
+              <td class="py-3 align-top" style="color: #3D2A22;"
+                data-id={p.descId} data-en={p.descEn}>{p.descId}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+
+  </section>
+</Base>
+
+<script>
+  import { initReferensiAnimation } from '../scripts/animations'
+
+  function initTabs() {
+    const btns = document.querySelectorAll<HTMLButtonElement>('.tab-btn')
+    const panels = document.querySelectorAll<HTMLElement>('.ref-panel')
+
+    btns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = btn.dataset.tab
+        btns.forEach(b => {
+          if (b.dataset.tab === target) {
+            b.style.borderColor = '#C4954A'
+            b.style.color = '#C4954A'
+          } else {
+            b.style.borderColor = 'transparent'
+            b.style.color = '#3D2A22'
+          }
+        })
+        panels.forEach(p => {
+          p.id === `panel-${target}` ? p.classList.remove('hidden') : p.classList.add('hidden')
+        })
+        // Re-trigger scroll animations for newly visible rows
+        initReferensiAnimation()
+      })
+    })
+  }
+
+  document.addEventListener('astro:page-load', () => {
+    initTabs()
+    initReferensiAnimation()
+  })
+  initTabs()
+  initReferensiAnimation()
+</script>
