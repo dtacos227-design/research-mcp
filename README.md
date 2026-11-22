@@ -85,7 +85,8 @@ Opsional, sebagai lapis kedua: pasang **Tesseract** agar halaman yang teksnya ti
 (< 40 karakter setelah OCR default) di-OCR ulang dengan model bahasa Tesseract.
 
 ```bash
-brew install tesseract tesseract-lang   # menyediakan data bahasa ind + eng
+brew install tesseract tesseract-lang   # macOS: menyediakan data bahasa ind + eng
+# Debian/Ubuntu: sudo apt install tesseract-ocr tesseract-ocr-ind
 ```
 
 | Env var | Default | Arti |

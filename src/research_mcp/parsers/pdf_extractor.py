@@ -1,4 +1,5 @@
 import contextlib
+import functools
 import os
 import re
 import sys
@@ -171,8 +172,9 @@ def _markdown_text(result: str | list[dict]) -> str:
     return "\n\n".join(chunks)
 
 
+@functools.lru_cache(maxsize=1)
 def _tesseract_available() -> bool:
-    """True bila Tesseract + tessdata bisa dipakai PyMuPDF."""
+    """True bila Tesseract + tessdata bisa dipakai PyMuPDF (di-cache sekali)."""
     try:
         pymupdf.get_tessdata()
     except Exception:
@@ -181,12 +183,18 @@ def _tesseract_available() -> bool:
 
 
 def _ocr_pages(pdf_path: Path, page_numbers: list[int], language: str) -> dict[int, str]:
-    """OCR satu set halaman dengan Tesseract; kegagalan per halaman ditelan."""
+    """OCR satu set halaman dengan Tesseract; kegagalan per halaman ditelan.
+
+    Halaman yang sudah punya text layer dilewati: teks digital selalu lebih
+    dipercaya daripada hasil OCR, berapa pun panjangnya.
+    """
     texts: dict[int, str] = {}
     with _parser_messages_to_stderr(), pymupdf.open(pdf_path) as document:
         for page_number in page_numbers:
             try:
                 page = document[page_number - 1]
+                if page.get_text().strip():
+                    continue
                 textpage = page.get_textpage_ocr(language=language, dpi=OCR_DPI, full=True)
                 texts[page_number] = textpage.extractText()
             except Exception as exc:  # OCR opsional: jangan pernah gagalkan tool
@@ -212,7 +220,10 @@ def _ocr_thin_pages(chunks: list[dict], pdf_path: Path, language: str) -> list[d
         print(f"Tesseract OCR skipped for pages {thin}: {exc}", file=sys.stderr)
         return chunks
     for chunk in chunks:
-        page_number = chunk.get("metadata", {}).get("page_number")
+        metadata = chunk.get("metadata")
+        page_number = metadata.get("page_number") if isinstance(metadata, dict) else None
+        if not isinstance(page_number, int):
+            continue
         text = replacements.get(page_number, "").strip()
         if text:
             chunk["text"] = text

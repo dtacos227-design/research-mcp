@@ -74,9 +74,8 @@ def ocr_case(tmp_path: Path):
 def _stub_pages(monkeypatch, texts: list[str]) -> None:
     """Ganti output parser dengan page chunks buatan.
 
-    Setelah Task 1 halaman scan sungguhan sudah berteks (RapidOCR), jadi jalur
-    halaman-tipis tidak pernah terpicu oleh PDF asli; test di bawah memaku
-    wiring `_ocr_thin_pages`, bukan perilaku RapidOCR.
+    Dipakai agar tiap kasus wiring bisa dipaku persis (panjang teks, jumlah
+    halaman) tanpa bergantung pada hasil OCR RapidOCR yang bervariasi.
     """
     chunks = [
         {"metadata": {"page_number": i + 1, "page_count": len(texts)}, "toc_items": [], "text": t}
@@ -185,7 +184,54 @@ def test_tesseract_available_is_false_when_tessdata_missing(monkeypatch):
         raise RuntimeError("No tessdata specified and Tesseract is not installed")
 
     monkeypatch.setattr(pdf_extractor.pymupdf, "get_tessdata", boom)
-    assert pdf_extractor._tesseract_available() is False
+    pdf_extractor._tesseract_available.cache_clear()
+    try:
+        assert pdf_extractor._tesseract_available() is False
+    finally:
+        pdf_extractor._tesseract_available.cache_clear()
+
+
+class _FakeTextPage:
+    """Pengganti TextPage agar test tidak butuh Tesseract terpasang."""
+
+    def extractText(self) -> str:  # noqa: N802 - API PyMuPDF
+        return "OCR OVERWRITE"
+
+
+@pytest.mark.parametrize("text", ["E = mc2 and F = ma", "— 7 —"])
+def test_short_digital_page_is_not_rewritten(ocr_case, monkeypatch, text):
+    """Halaman ber-text layer tidak boleh di-OCR ulang walau teksnya < ambang."""
+    project_dir, pdf_path = ocr_case
+    _make_digital_pdf(pdf_path, text)
+    _stub_pages(monkeypatch, [text])
+    monkeypatch.setattr(pdf_extractor, "_tesseract_available", lambda: True)
+    calls: list[dict] = []
+    monkeypatch.setattr(
+        pymupdf.Page,
+        "get_textpage_ocr",
+        lambda self, **kwargs: calls.append(kwargs) or _FakeTextPage(),
+    )
+
+    markdown = pdf_extractor.extract_markdown(pdf_path, project_dir)
+
+    assert calls == []  # halaman punya text layer → tidak disentuh
+    assert markdown == text
+
+
+def test_ocr_pages_passes_language_dpi_and_page_index(ocr_case, monkeypatch):
+    """Kontrak `_ocr_pages`: dpi 300, full page, bahasa dari setting, indeks 1-based."""
+    _, pdf_path = ocr_case
+    seen: list[tuple[int, dict]] = []
+    monkeypatch.setattr(
+        pymupdf.Page,
+        "get_textpage_ocr",
+        lambda self, **kwargs: seen.append((self.number, kwargs)) or _FakeTextPage(),
+    )
+
+    pages = pdf_extractor._ocr_pages(pdf_path, [1], "eng")
+
+    assert seen == [(0, {"language": "eng", "dpi": 300, "full": True})]
+    assert pages == {1: "OCR OVERWRITE"}
 
 
 @pytest.mark.skipif(
