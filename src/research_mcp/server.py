@@ -37,7 +37,7 @@ from research_mcp.providers.aggregator import search_all
 from research_mcp.providers.crossref import get_bibtex, get_by_doi
 from research_mcp.providers.semantic_scholar import get_citations, get_references
 from research_mcp.providers.unpaywall import get_oa_location
-from research_mcp.styles.models import StyleSpec
+from research_mcp.styles.models import SectionSpec, StyleSpec
 from research_mcp.styles.registry import get_style, list_styles
 from research_mcp.writers import draft_manager
 from research_mcp.writers.chart_runner import run_chart
@@ -253,32 +253,39 @@ async def get_research_brief(project_id: str) -> dict:
 
 
 @mcp.tool()
-async def start_research(project_id: str) -> dict:
+async def start_research(project_id: str, overwrite: bool = False) -> dict:
     """Check the intake gate and start the research once the brief is complete.
 
     An incomplete brief returns `needs_input` with one bilingual question per
     missing field and creates no files; answer them with `save_research_brief`
     and call this again.
+
+    Once the brief is complete, every section of the chosen style outline gets a
+    `drafts/<filename>` skeleton holding its heading and guidance comment, plus a
+    `draft_sections` row. Existing non-empty files are left untouched and reported
+    as `conflicts` unless `overwrite=True`.
     """
     try:
-        conn = await get_connection(get_settings().db_path)
+        settings = get_settings()
+        conn = await get_connection(settings.db_path)
         try:
-            await _get_project_or_raise(conn, project_id)
+            project = await _get_project_or_raise(conn, project_id)
             stored = await repository.get_project_brief(conn, project_id)
             brief = ResearchBrief.model_validate(stored or {})
             missing = brief.missing()
+            style = await _resolve_style_for_export(conn, project_id, brief.style_id)
             if missing:
-                style = await _resolve_style_for_export(conn, project_id, brief.style_id)
                 return {
                     "status": "needs_input",
                     "missing": missing,
                     "ask_user": _ask_user_prompts(missing, style),
                     "defaults": {"citation": style.citation, "language": brief.language},
                 }
+            return await _create_style_skeleton(
+                conn, project_id, _project_dir(settings, project), style, overwrite
+            )
         finally:
             await conn.close()
-        # Task 7 replaces this placeholder with the style's draft skeleton.
-        return {"status": "created", "created_files": []}
     except ToolError:
         raise
     except Exception as exc:
@@ -638,6 +645,58 @@ async def _resolve_style_for_export(conn, project_id: str, style: str | None) ->
     project = await _get_project_or_raise(conn, project_id)
     requested = (style or "").strip() or project.style_id or DEFAULT_RESEARCH_STYLE
     return get_style(requested)
+
+
+def _skeleton_markdown(section: SectionSpec) -> str:
+    return f"# {section.title}\n\n<!-- guidance: {section.guidance} -->\n"
+
+
+async def _create_style_skeleton(
+    conn,
+    project_id: str,
+    project_dir: Path,
+    style: StyleSpec,
+    overwrite: bool,
+) -> dict:
+    """Write one `drafts/<filename>` skeleton per outline section, in style order.
+
+    Nothing is written when an existing non-empty file would be clobbered and
+    `overwrite` is false: the caller gets `exists` plus the conflicting names so
+    the user can decide.
+    """
+    sections = sorted(style.outline, key=lambda section: section.order)
+    targets = [
+        (section, _safe_destination(project_dir / "drafts" / section.filename, project_dir))
+        for section in sections
+    ]
+    conflicts = [
+        section.filename
+        for section, target in targets
+        if target.is_file() and target.stat().st_size > 0
+    ]
+    if conflicts and not overwrite:
+        return {"status": "exists", "conflicts": conflicts}
+
+    created_files: list[str] = []
+    for section, target in targets:
+        content = _skeleton_markdown(section)
+        _write_file(target, project_dir, content)
+        await repository.upsert_draft_section(
+            conn,
+            project_id,
+            section.filename,
+            section.order,
+            section.title,
+            len(content.split()),
+        )
+        created_files.append(section.filename)
+
+    return {
+        "status": "created",
+        "created_files": created_files,
+        "guidance": style.guidance,
+        "style_id": style.id,
+    }
 
 
 async def _render_docx_export(
