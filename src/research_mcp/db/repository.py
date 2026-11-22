@@ -625,3 +625,90 @@ async def list_draft_sections(
         }
         for row in rows
     ]
+
+
+# Columns a caller may rewrite through `update_paper`; everything else is owned
+# by ingestion (ids, timestamps, pdf paths, provider provenance).
+_PAPER_MUTABLE_COLUMNS = frozenset(
+    {
+        "citekey",
+        "doi",
+        "title",
+        "authors_json",
+        "authors_structured_json",
+        "year",
+        "venue",
+        "abstract",
+        "bibtex_raw",
+        "csl_json",
+    }
+)
+
+
+async def update_paper(
+    conn: aiosqlite.Connection,
+    project_id: str,
+    citekey: str,
+    fields: dict[str, object],
+) -> tuple[PaperModel | None, PaperModel | None]:
+    """Rewrite metadata columns for one paper and return `(before, after)`.
+
+    Returns `(None, None)` when the citekey is not in the project. Column names
+    are validated against a whitelist so the dynamic SET clause stays safe.
+    """
+    unknown = set(fields) - _PAPER_MUTABLE_COLUMNS
+    if unknown:
+        raise ValueError(f"Unsupported paper column(s): {', '.join(sorted(unknown))}")
+
+    before = await get_paper_by_citekey(conn, project_id, citekey)
+    if before is None:
+        return None, None
+
+    columns = sorted(fields)
+    assignments = ", ".join(f"{column} = ?" for column in columns)
+    await conn.execute(
+        f"UPDATE papers SET {assignments} WHERE id = ?",
+        (*[fields[column] for column in columns], before.id),
+    )
+    await conn.commit()
+    new_citekey = str(fields.get("citekey", before.citekey))
+    return before, await get_paper_by_citekey(conn, project_id, new_citekey)
+
+
+async def delete_paper_by_citekey(
+    conn: aiosqlite.Connection,
+    project_id: str,
+    citekey: str,
+) -> PaperModel | None:
+    """Delete one paper (sections and FTS rows cascade) and return what was removed."""
+    paper = await get_paper_by_citekey(conn, project_id, citekey)
+    if paper is None:
+        return None
+    await conn.execute("DELETE FROM papers WHERE id = ?", (paper.id,))
+    await conn.commit()
+    return paper
+
+
+async def delete_draft_section_row(
+    conn: aiosqlite.Connection,
+    project_id: str,
+    filename: str,
+) -> bool:
+    """Drop a draft's database row; True when a row existed."""
+    cursor = await conn.execute(
+        "DELETE FROM draft_sections WHERE project_id = ? AND filename = ?",
+        (project_id, filename),
+    )
+    await conn.commit()
+    return cursor.rowcount > 0
+
+
+async def delete_project_row(
+    conn: aiosqlite.Connection,
+    project_id: str,
+) -> dict | None:
+    """Delete a project row (papers, sections and drafts cascade) and return its identity."""
+    project = await get_project(conn, project_id)
+    await conn.execute("DELETE FROM projects WHERE id = ?", (project.id,))
+    await conn.commit()
+    return {"id": project.id, "slug": project.slug, "name": project.name}

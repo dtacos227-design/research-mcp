@@ -548,3 +548,20 @@ async def ingest_local_pdf(
         import_status="imported",
         section_count=persisted_section_count,
     )
+
+
+def remove_paper_artifacts(pdf_path: Path | None, project_dir: Path) -> list[str]:
+    """Delete a removed paper's PDF and parsed Markdown, never leaving the project."""
+    if pdf_path is None:
+        return []
+    candidates = [pdf_path, project_dir / "parsed" / f"{pdf_path.stem}.md"]
+    removed: list[str] = []
+    for candidate in candidates:
+        try:
+            safe = _safe_destination(candidate, project_dir)
+        except ValueError:
+            continue
+        if safe.is_file():
+            safe.unlink(missing_ok=True)
+            removed.append(str(safe))
+    return removed

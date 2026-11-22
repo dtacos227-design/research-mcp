@@ -1,6 +1,7 @@
 import asyncio
 import json
 import re
+import shutil
 from pathlib import Path
 from typing import Literal
 from uuid import uuid4
@@ -38,12 +39,14 @@ from research_mcp.parsers.ingestion import (
     _safe_destination,
     ingest_local_pdf,
     ingest_remote_paper,
+    remove_paper_artifacts,
 )
 from research_mcp.providers.aggregator import search_all
 from research_mcp.providers.crossref import get_bibtex, get_by_doi
 from research_mcp.providers.semantic_scholar import get_citations, get_references
 from research_mcp.providers.unpaywall import get_oa_location
 from research_mcp.styles.models import (
+    SAFE_DRAFT_FILENAME_RE,
     SectionSpec,
     StyleSpec,
     is_toc_section,
@@ -567,6 +570,245 @@ async def save_draft_section(
     except Exception as exc:
         raise ToolError(
             f"Could not save draft section {filename!r}: {type(exc).__name__}: {exc}"
+        ) from exc
+
+
+_CITEKEY_RE = re.compile(r"^[a-z][a-z0-9]*$")
+
+
+async def _drafts_citing(project_dir: Path, citekey: str) -> list[str]:
+    """Draft chapters that still cite `citekey`, so destructive edits can warn."""
+    drafts_dir = project_dir / "drafts"
+    if not drafts_dir.is_dir():
+        return []
+    hits: list[str] = []
+    for path in sorted(drafts_dir.glob("*.md")):
+        text = _read_draft(path)
+        if text and citekey in extract_citekeys(text):
+            hits.append(path.name)
+    return hits
+
+
+@mcp.tool()
+async def update_paper_metadata(
+    project_id: str,
+    citekey: str,
+    title: str | None = None,
+    authors: list[str] | None = None,
+    year: int | None = None,
+    doi: str | None = None,
+    venue: str | None = None,
+    new_citekey: str | None = None,
+) -> dict:
+    """Correct a saved paper's metadata (and optionally rename its citekey).
+
+    Use this to repair papers imported with weak metadata. Renaming the citekey
+    does not rewrite drafts: `stale_draft_citations` lists the chapters that
+    still use the old key so the caller can fix `[@oldkey]` markers.
+    """
+    try:
+        settings = get_settings()
+        conn = await get_connection(settings.db_path)
+        try:
+            project = await _get_project_or_raise(conn, project_id)
+            existing = await repository.get_paper_by_citekey(conn, project_id, citekey)
+            if existing is None:
+                raise ToolError(f"Citekey {citekey!r} is not in project {project_id!r}.")
+
+            fields: dict[str, object] = {}
+            if title is not None:
+                cleaned_title = title.strip()
+                if not cleaned_title:
+                    raise ToolError("title must not be empty when provided.")
+                fields["title"] = cleaned_title
+            if authors is not None:
+                cleaned_authors = [name.strip() for name in authors if name.strip()]
+                if not cleaned_authors:
+                    raise ToolError("authors must contain at least one name.")
+                fields["authors_json"] = json.dumps(cleaned_authors)
+                # Structured names would otherwise shadow the corrected list.
+                fields["authors_structured_json"] = None
+            if year is not None:
+                if not 0 <= year <= 9999:
+                    raise ToolError("year must be between 0 and 9999.")
+                fields["year"] = year
+            if doi is not None:
+                cleaned_doi = doi.strip()
+                fields["doi"] = cleaned_doi or None
+            if venue is not None:
+                cleaned_venue = venue.strip()
+                fields["venue"] = cleaned_venue or None
+            renamed = False
+            if new_citekey is not None:
+                candidate = new_citekey.strip()
+                if not _CITEKEY_RE.match(candidate):
+                    raise ToolError(
+                        "new_citekey must match ^[a-z][a-z0-9]*$ (lowercase letters and digits)."
+                    )
+                if candidate != citekey:
+                    clash = await repository.get_paper_by_citekey(conn, project_id, candidate)
+                    if clash is not None:
+                        raise ToolError(
+                            f"Citekey {candidate!r} is already used by another paper "
+                            "in this project."
+                        )
+                    fields["citekey"] = candidate
+                    renamed = True
+
+            if not fields:
+                raise ToolError(
+                    "Provide at least one field to update "
+                    "(title, authors, year, doi, venue or new_citekey)."
+                )
+            if title is not None or authors is not None or year is not None or doi is not None:
+                # Force the bibliography builders to regenerate from live metadata.
+                fields["bibtex_raw"] = None
+                fields["csl_json"] = None
+
+            _before, updated = await repository.update_paper(conn, project_id, citekey, fields)
+            project_dir = _project_dir(settings, project)
+            await _refresh_bibliography(conn, project_id, project_dir)
+            stale = await _drafts_citing(project_dir, citekey) if renamed else []
+            warnings = []
+            if stale:
+                warnings.append(
+                    "Drafts still cite the old key: "
+                    + ", ".join(stale)
+                    + ". Replace those markers with the new citekey."
+                )
+            return {
+                "paper": updated.model_dump() if updated is not None else None,
+                "renamed_from": citekey if renamed else None,
+                "stale_draft_citations": stale,
+                "warnings": warnings,
+            }
+        finally:
+            await conn.close()
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(
+            f"Could not update paper {citekey!r} in project {project_id!r}: "
+            f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+
+@mcp.tool()
+async def delete_paper(project_id: str, citekey: str, delete_artifacts: bool = True) -> dict:
+    """Remove a paper from the project library (its PDF and parsed text too)."""
+    try:
+        settings = get_settings()
+        conn = await get_connection(settings.db_path)
+        try:
+            project = await _get_project_or_raise(conn, project_id)
+            project_dir = _project_dir(settings, project)
+            existing = await repository.get_paper_by_citekey(conn, project_id, citekey)
+            if existing is None:
+                raise ToolError(f"Citekey {citekey!r} is not in project {project_id!r}.")
+            cited_by = await _drafts_citing(project_dir, citekey)
+            removed = await repository.delete_paper_by_citekey(conn, project_id, citekey)
+            artifacts = (
+                remove_paper_artifacts(
+                    Path(existing.pdf_path) if existing.pdf_path else None, project_dir
+                )
+                if delete_artifacts
+                else []
+            )
+            await _refresh_bibliography(conn, project_id, project_dir)
+            warnings = []
+            if cited_by:
+                warnings.append("Drafts still cite the deleted key: " + ", ".join(cited_by) + ".")
+            return {
+                "deleted": removed is not None,
+                "citekey": citekey,
+                "cited_by": cited_by,
+                "artifacts_removed": artifacts,
+                "warnings": warnings,
+            }
+        finally:
+            await conn.close()
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(
+            f"Could not delete paper {citekey!r} from project {project_id!r}: "
+            f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+
+@mcp.tool()
+async def delete_draft_section(project_id: str, filename: str) -> dict:
+    """Delete one draft chapter: markdown file plus its draft_sections row."""
+    try:
+        if not SAFE_DRAFT_FILENAME_RE.match(filename) or ".." in filename:
+            raise ToolError(f"filename {filename!r} must be a plain `.md` name (no directories).")
+        settings = get_settings()
+        conn = await get_connection(settings.db_path)
+        try:
+            project = await _get_project_or_raise(conn, project_id)
+            existing = await repository.get_draft_section(conn, project_id, filename)
+            if existing is None:
+                raise ToolError(f"No draft section {filename!r} in project {project_id!r}.")
+            await repository.delete_draft_section_row(conn, project_id, filename)
+            project_dir = _project_dir(settings, project)
+            target = _safe_destination(project_dir / "drafts" / filename, project_dir)
+            target.unlink(missing_ok=True)
+            return {"deleted": True, "filename": filename, "title": existing["title"]}
+        finally:
+            await conn.close()
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(
+            f"Could not delete draft {filename!r} from project {project_id!r}: "
+            f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+
+@mcp.tool()
+async def delete_project(project_id: str, confirm: str) -> dict:
+    """Delete a project with its library, drafts and workspace directory.
+
+    `confirm` must repeat the project slug (see `list_projects`); anything else
+    is refused so a mistyped tool call cannot destroy a workspace.
+    """
+    try:
+        settings = get_settings()
+        conn = await get_connection(settings.db_path)
+        try:
+            project = await _get_project_or_raise(conn, project_id)
+            if confirm.strip() != project.slug:
+                raise ToolError(
+                    f"Refusing to delete project {project_id!r}: pass confirm={project.slug!r} "
+                    "(the project slug) to confirm."
+                )
+            project_dir = (settings.workspace_dir / project.slug).resolve()
+            workspace_root = settings.workspace_dir.resolve()
+            if project_dir == workspace_root or not project_dir.is_relative_to(workspace_root):
+                raise ToolError("Refusing to delete a workspace outside RESEARCH_MCP_WORKSPACE.")
+        finally:
+            await conn.close()
+
+        conn = await get_connection(settings.db_path)
+        try:
+            deleted = await repository.delete_project_row(conn, project_id)
+        finally:
+            await conn.close()
+
+        workspace_removed = False
+        if project_dir.is_dir():
+            await asyncio.to_thread(shutil.rmtree, project_dir)
+            workspace_removed = True
+        return {
+            "deleted": deleted is not None,
+            "slug": project.slug,
+            "workspace_removed": workspace_removed,
+        }
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(
+            f"Could not delete project {project_id!r}: {type(exc).__name__}: {exc}"
         ) from exc
 
 
