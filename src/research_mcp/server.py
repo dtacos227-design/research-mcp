@@ -1843,8 +1843,46 @@ def systematic_literature_review(topic: str, year_from: int = 2000) -> str:
 
 
 def _draft_latex_paper_text(project_id: str, template_name: str) -> str:
-    return f"""You are drafting a LaTeX research paper for project {project_id!r}
-using the {template_name!r} template.
+    if template_name == "ieee":
+        intro = (
+            f"You are drafting a LaTeX research paper for project {project_id!r}\n"
+            "using the project's research style."
+        )
+        template_note = (
+            "The project's research style supplies the page geometry, typography and\n"
+            "citation, so omit `style=` and `template_name` from the call below: the\n"
+            "style's `export.latex_template` (and its citation) win. The legacy `ieee`\n"
+            "default is deliberately NOT passed — pass `template_name` only when the user\n"
+            "explicitly asks for a specific template."
+        )
+        export_call = f"""export_to_latex(
+    project_id={project_id!r},
+    output_name="paper",
+    compile_pdf=True,
+    strict_citations=True,
+)
+# template_name is omitted on purpose: the project style's export.latex_template
+# and citation win. Never add the legacy `ieee` default here."""
+    else:
+        intro = (
+            f"You are drafting a LaTeX research paper for project {project_id!r}\n"
+            f"using the {template_name!r} template the user asked for."
+        )
+        template_note = (
+            f"The user explicitly asked for the {template_name!r} template, so pass it\n"
+            "explicitly. The project's research style still supplies the page geometry and\n"
+            "typography, so omit `style=`; `template_name` selects that template and its\n"
+            "CSL citation."
+        )
+        export_call = f"""export_to_latex(
+    project_id={project_id!r},
+    output_name="paper",
+    template_name="{template_name}",
+    compile_pdf=True,
+    strict_citations=True,
+)"""
+
+    return f"""{intro}
 
 This prompt is the LaTeX tail of the generic `research_workflow`: for style intake,
 the user-confirmed brief, `start_research` and chapter-by-chapter drafting, follow
@@ -1885,18 +1923,10 @@ and order come from the project style's `outline`; the IMRaD example is:
 
 ## Step 4 — Compile the LaTeX paper
 
-The project's research style supplies the page geometry and typography, so omit
-`style=` and leave `template_name` unset unless the user explicitly asked for
-{template_name!r} (the style's `export.latex_template` is the default):
+{template_note}
 
 ```
-export_to_latex(
-    project_id={project_id!r},
-    output_name="paper",
-    template_name={template_name!r},
-    compile_pdf=True,
-    strict_citations=True,
-)
+{export_call}
 ```
 
 If Tectonic is not installed, `compile_pdf=True` will raise an error.
