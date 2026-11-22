@@ -87,6 +87,9 @@ async def test_markdown_bundle_merges_all_chapters(project_with_drafts, monkeypa
     assert result["format"] == "markdown"
     assert result["style_id"] == "article_imrad"
     assert result["csl_style"] == "apa"
+    assert result["warnings"] == [
+        "Exported draft(s) not in the style outline: 01_abstract.md, 02_intro.md"
+    ]
     merged = recorded[0]["markdown"]
     assert "Abs body." in merged
     assert "Intro body [@doe2024valid]." in merged
