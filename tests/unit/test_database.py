@@ -1,6 +1,7 @@
+from pathlib import Path
+
 import aiosqlite
 import pytest
-from pathlib import Path
 
 from research_mcp.config import Settings
 from research_mcp.db import repository

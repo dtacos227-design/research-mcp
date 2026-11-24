@@ -1,5 +1,4 @@
 import pytest
-from pathlib import Path
 
 from research_mcp.config import validate_output_root
 

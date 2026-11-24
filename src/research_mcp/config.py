@@ -109,7 +109,6 @@ class _MappedTomlSource(TomlConfigSettingsSource):
         return mapped
 
 
-
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         validate_default=True,
