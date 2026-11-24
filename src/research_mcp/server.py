@@ -1,5 +1,7 @@
+import argparse
 import asyncio
 import json
+import logging
 import os
 import re
 import shutil
@@ -17,6 +19,7 @@ from research_mcp.config import (
     config_file_path,
     configure_logging,
     get_settings,
+    persist_output_root,
     validate_output_root,
 )
 from research_mcp.db import repository
@@ -2626,9 +2629,77 @@ async def resource_outline(project_id: str) -> str:
     return "\n".join(lines)
 
 
-def main() -> None:
-    settings = get_settings()
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="research-mcp",
+        description="Research MCP server (stdio transport).",
+    )
+    parser.add_argument(
+        "--output-dir",
+        "--output-root",
+        dest="output_dir",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Folder that holds every project folder (each project gets <PATH>/<slug>). "
+            "Saved to the config file so later runs remember it."
+        ),
+    )
+    parser.add_argument(
+        "--no-persist",
+        action="store_true",
+        help="Use --output-dir for this run only; do not write the config file.",
+    )
+    parser.add_argument(
+        "--show-config",
+        action="store_true",
+        help="Print the effective configuration as JSON and exit without serving.",
+    )
+    return parser
+
+
+def _config_snapshot(settings) -> dict:
+    return {
+        "output_root": str(settings.output_root),
+        "source": settings.output_root_source,
+        "writable": _is_writable(settings.output_root),
+        "db_path": str(settings.db_path),
+        "config_file": str(config_file_path()),
+        "legacy_env_present": bool(os.environ.get(LEGACY_OUTPUT_ROOT_ENV)),
+    }
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+
+    cli_output_root: Path | None = None
+    if args.output_dir:
+        try:
+            cli_output_root = validate_output_root(args.output_dir)
+        except ValueError as exc:
+            parser.error(str(exc))
+
+    settings = get_settings(cli_output_dir=cli_output_root)
+
+    if cli_output_root is not None and not args.no_persist:
+        try:
+            persist_output_root(cli_output_root)
+        except ValueError as exc:
+            parser.error(str(exc))
+
     configure_logging(settings.log_level)
+
+    if args.show_config:
+        print(json.dumps(_config_snapshot(settings), indent=2))
+        return
+
+    logging.getLogger(__name__).info(
+        "output root: %s (source: %s); db: %s",
+        settings.output_root,
+        settings.output_root_source,
+        settings.db_path,
+    )
     mcp.run()
 
 
