@@ -58,6 +58,11 @@ async def create_project(
     # roll back if that fails so no project exists without its workspace.
     try:
         project_dir = root / slug
+        if project_dir.is_dir() and any(project_dir.iterdir()):
+            raise FileExistsError(
+                f"{project_dir} already exists and is not empty; refusing to adopt a folder "
+                "that may belong to another project."
+            )
         project_dir.mkdir(parents=True, exist_ok=True)
         for sub in WORKSPACE_SUBDIRS:
             (project_dir / sub).mkdir(parents=True, exist_ok=True)

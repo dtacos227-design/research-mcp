@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from research_mcp.config import (
+    ConfigError,
     Settings,
     config_file_path,
     persist_output_root,
@@ -65,5 +66,5 @@ def test_persist_refuses_nested_tables(tmp_path, monkeypatch):
     cfg = tmp_path / "config.toml"
     cfg.write_text('[nested]\nkey = "v"\n', encoding="utf-8")
     monkeypatch.setenv("RESEARCH_MCP_CONFIG_FILE", str(cfg))
-    with pytest.raises(ValueError, match="nested table"):
+    with pytest.raises(ConfigError, match="nested table"):
         persist_output_root(tmp_path / "Riset")

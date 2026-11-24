@@ -1,9 +1,8 @@
-from pathlib import Path
-
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 
 from research_mcp import server
+from research_mcp.config import get_settings
 from research_mcp.exporters import wordcraft_bridge as wb
 
 
@@ -25,7 +24,9 @@ async def test_env_report_without_wordcraft(workspace, monkeypatch):
     assert report["desktop_app"]["found"] is False
     assert report["live_desktop"]["ready"] is False
     assert report["confinement"]["mcp_command"][1] == "mcp"
-    assert Path(report["workspace_root"]).is_dir()
+    # A diagnostic never creates folders: it reports the state instead.
+    assert report["workspace_root"] == str(get_settings().output_root)
+    assert report["confinement"]["roots"][0]["root"] == report["workspace_root"]
     assert any("export_to_docx" in item for item in report["recommendations"])
 
 

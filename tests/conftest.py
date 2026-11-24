@@ -2,6 +2,7 @@
 
 import pytest
 
+from research_mcp import config
 from research_mcp.providers.aggregator import clear_search_cache
 from research_mcp.styles import registry
 
@@ -42,3 +43,6 @@ def _hermetic_config_file(tmp_path, monkeypatch):
     monkeypatch.setenv("RESEARCH_MCP_CONFIG_FILE", str(tmp_path / "config.toml"))
     monkeypatch.delenv("RESEARCH_MCP_OUTPUT_ROOT", raising=False)
     monkeypatch.delenv("RESEARCH_MCP_WORKSPACE", raising=False)
+    config.set_cli_output_root(None)
+    yield
+    config.set_cli_output_root(None)

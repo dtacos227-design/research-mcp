@@ -1,8 +1,11 @@
+import json
 import logging
 import os
+import re
 import sys
 import tomllib
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import (
@@ -18,6 +21,29 @@ DEFAULT_CONFIG_FILE = Path.home() / ".research-mcp" / "config.toml"
 LEGACY_OUTPUT_ROOT_ENV = "RESEARCH_MCP_WORKSPACE"
 OUTPUT_ROOT_ENV = "RESEARCH_MCP_OUTPUT_ROOT"
 CONFIG_FILE_ENV = "RESEARCH_MCP_CONFIG_FILE"
+DB_PATH_ENV = "RESEARCH_MCP_DB_PATH"
+
+logger = logging.getLogger(__name__)
+
+OutputRootSource = Literal["cli", "env", "env-legacy", "config", "default"]
+_BARE_TOML_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+class ConfigError(RuntimeError):
+    """The configuration cannot be read; callers should surface it, not crash."""
+
+
+_cli_output_root: Path | None = None
+
+
+def set_cli_output_root(path: Path | None) -> None:
+    """Pin the output root chosen on the command line for this process.
+
+    Every tool calls `get_settings()` afresh, so a `--output-dir` that was not
+    persisted (or not readable yet) has to live in module state to reach them.
+    """
+    global _cli_output_root
+    _cli_output_root = path
 
 
 def config_file_path() -> Path:
@@ -30,8 +56,17 @@ def read_config_file() -> dict[str, object]:
     path = config_file_path()
     if not path.is_file():
         return {}
-    with path.open("rb") as handle:
-        return tomllib.load(handle)
+    try:
+        with path.open("rb") as handle:
+            return tomllib.load(handle)
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(f"{path} is not valid TOML: {exc}") from exc
+    except OSError as exc:
+        raise ConfigError(f"{path} cannot be read: {exc}") from exc
+
+
+def _format_toml_key(key: str) -> str:
+    return key if _BARE_TOML_KEY.match(key) else json.dumps(key)
 
 
 def _format_toml_value(value: object) -> str:
@@ -39,21 +74,20 @@ def _format_toml_value(value: object) -> str:
         return "true" if value else "false"
     if isinstance(value, (int, float)):
         return str(value)
-    text = str(value).replace("\\", "\\\\").replace('"', '\\"')
-    return f'"{text}"'
+    return json.dumps(str(value))
 
 
 def persist_output_root(path: Path) -> None:
-    """Store `path` as the config-file default output root.
+    """Store `path` as the config-file default output root, atomically.
 
-    Keys already in the file are kept; a nested table is refused rather than
+    Keys already in the file are kept. A nested table is refused rather than
     dropped, because writing it back is not something this tool can do losslessly.
     """
     target = config_file_path()
     existing = read_config_file()
     for key, value in existing.items():
         if isinstance(value, dict):
-            raise ValueError(
+            raise ConfigError(
                 f"{target} contains a nested table ([{key}]), which research-mcp cannot "
                 "rewrite. Remove it and set `output_root` there by hand."
             )
@@ -61,9 +95,16 @@ def persist_output_root(path: Path) -> None:
 
     lines = ["# Managed by research-mcp. `research-mcp --output-dir <path>` updates output_root."]
     for key, value in existing.items():
-        lines.append(f"{key} = {_format_toml_value(value)}")
+        lines.append(f"{_format_toml_key(key)} = {_format_toml_value(value)}")
+
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    temporary = target.with_name(f".{target.name}.{os.getpid()}.part")
+    try:
+        temporary.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        os.replace(temporary, target)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
 
 
 def validate_output_root(raw: str | Path) -> Path:
@@ -95,18 +136,58 @@ def validate_output_root(raw: str | Path) -> Path:
     return resolved
 
 
+def describe_root(path: Path) -> dict[str, bool]:
+    """Report a root's usability without touching the filesystem."""
+    exists = path.exists()
+    is_dir = path.is_dir()
+    if exists:
+        writable = is_dir and os.access(path, os.W_OK)
+    else:
+        probe = path
+        while not probe.exists() and probe != probe.parent:
+            probe = probe.parent
+        writable = os.access(probe, os.W_OK) and probe.is_dir()
+    return {"exists": exists, "is_dir": is_dir, "writable": writable}
+
+
 class _MappedTomlSource(TomlConfigSettingsSource):
-    """TOML keys use field names; validation uses each field's env alias."""
+    """TOML keys use field names; validation uses each field's env alias.
+
+    Unknown keys are dropped with a warning: a typo in a hand-edited config file
+    must not stop the server from starting.
+    """
 
     def __call__(self) -> dict[str, object]:
-        data = super().__call__() or {}
+        try:
+            data = super().__call__() or {}
+        except tomllib.TOMLDecodeError as exc:
+            raise ConfigError(f"{config_file_path()} is not valid TOML: {exc}") from exc
+
         fields = self.settings_cls.model_fields
         mapped: dict[str, object] = {}
         for key, value in data.items():
             field = fields.get(key)
-            alias = getattr(field, "validation_alias", None) if field is not None else None
+            if field is None:
+                logger.warning("ignoring unknown key %r in %s", key, config_file_path())
+                continue
+            alias = getattr(field, "validation_alias", None)
             mapped[alias if isinstance(alias, str) else key] = value
         return mapped
+
+
+def _existing_db_candidates(output_root: Path) -> list[Path]:
+    """Databases this process should adopt, most trustworthy first.
+
+    An existing database always beats creating a fresh one: losing a user's
+    projects is the failure this feature exists to prevent.
+    """
+    candidates: list[Path] = []
+    legacy_root = os.environ.get(LEGACY_OUTPUT_ROOT_ENV)
+    if legacy_root:
+        candidates.append(Path(legacy_root).expanduser().resolve().parent / "research_mcp.db")
+    candidates.append(DEFAULT_DB_PATH)
+    candidates.append(output_root.parent / "research_mcp.db")
+    return [candidate for candidate in candidates if candidate.exists()]
 
 
 class Settings(BaseSettings):
@@ -118,8 +199,8 @@ class Settings(BaseSettings):
     )
 
     output_root: Path = Field(default_factory=lambda: DEFAULT_OUTPUT_ROOT)
-    output_root_source: str = Field(default="default")
-    db_path: Path | None = Field(default=None, validation_alias="RESEARCH_MCP_DB_PATH")
+    output_root_source: OutputRootSource = Field(default="default")
+    db_path: Path | None = Field(default=None, validation_alias=DB_PATH_ENV)
     email: str | None = Field(default=None, validation_alias="RESEARCH_MCP_EMAIL")
     log_level: str = Field(default="INFO", validation_alias="RESEARCH_MCP_LOG_LEVEL")
     ocr_language: str = Field(default="ind+eng", validation_alias="RESEARCH_MCP_OCR_LANGUAGE")
@@ -147,12 +228,13 @@ class Settings(BaseSettings):
     def _apply_legacy_output_root_env(cls, values: object) -> object:
         """Honour the pre-0.2 `RESEARCH_MCP_WORKSPACE` name.
 
-        Applied before sources are merged so it behaves like any other env var:
-        the new name still wins when both are set.
+        Injected as an init value so it outranks the config file, matching the
+        documented precedence (env beats file). The new name still wins, and a
+        command-line choice outranks both.
         """
         if not isinstance(values, dict):
             return values
-        if "output_root" in values:
+        if values.get("output_root_source") == "cli":
             return values
         if os.environ.get(OUTPUT_ROOT_ENV):
             return values
@@ -169,9 +251,8 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _resolve_db_path(self) -> "Settings":
         if self.db_path is None:
-            legacy_path = (self.output_root.parent / "research_mcp.db").resolve()
-            use_legacy = not DEFAULT_DB_PATH.exists() and legacy_path.exists()
-            path = legacy_path if use_legacy else DEFAULT_DB_PATH
+            existing = _existing_db_candidates(self.output_root)
+            path = existing[0] if existing else DEFAULT_DB_PATH
         else:
             path = self.db_path
         self.db_path = path.expanduser().resolve()
@@ -196,9 +277,10 @@ class Settings(BaseSettings):
 
 
 def get_settings(cli_output_dir: Path | None = None) -> Settings:
-    if cli_output_dir is None:
+    root = cli_output_dir if cli_output_dir is not None else _cli_output_root
+    if root is None:
         return Settings()
-    return Settings(output_root=cli_output_dir, output_root_source="cli")
+    return Settings(output_root=root, output_root_source="cli")
 
 
 def configure_logging(level: str = "INFO") -> None:

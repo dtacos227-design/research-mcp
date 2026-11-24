@@ -16,10 +16,13 @@ from research_mcp.citations.bibtex import build_bibtex_entry, build_csl_entry
 from research_mcp.citations.verifier import diff_citations, extract_citekeys
 from research_mcp.config import (
     LEGACY_OUTPUT_ROOT_ENV,
+    ConfigError,
     config_file_path,
     configure_logging,
+    describe_root,
     get_settings,
     persist_output_root,
+    set_cli_output_root,
     validate_output_root,
 )
 from research_mcp.db import repository
@@ -107,7 +110,9 @@ async def create_project(name: str, description: str = "", output_dir: str | Non
     """
     try:
         settings = get_settings()
-        root = validate_output_root(output_dir) if output_dir else settings.output_root
+        if output_dir is not None and not output_dir.strip():
+            raise ValueError("output_dir is empty; pass a folder path or omit it.")
+        root = validate_output_root(output_dir if output_dir is not None else settings.output_root)
         conn = await get_connection(settings.db_path)
         try:
             project = await repository.create_project(conn, root, name, description)
@@ -148,12 +153,8 @@ async def list_projects() -> list[dict]:
         raise ToolError(f"{type(exc).__name__}: {exc}") from exc
 
 
-def _is_writable(root: Path) -> bool:
-    """True when `root` can be created or written; missing folders inherit their parent."""
-    probe = root
-    while not probe.exists() and probe != probe.parent:
-        probe = probe.parent
-    return os.access(probe, os.W_OK)
+def _describe_root(root: Path) -> dict[str, bool]:
+    return describe_root(root)
 
 
 @mcp.tool()
@@ -165,7 +166,7 @@ async def get_output_config() -> dict:
         return {
             "output_root": str(root),
             "source": settings.output_root_source,
-            "writable": _is_writable(root),
+            **_describe_root(root),
             "db_path": str(settings.db_path),
             "config_file": str(config_file_path()),
             "legacy_env_present": bool(os.environ.get(LEGACY_OUTPUT_ROOT_ENV)),
@@ -1682,7 +1683,7 @@ async def check_wordcraft_env(project_id: str | None = None) -> dict:
     """
     try:
         settings = get_settings()
-        workspace_root = validate_output_root(settings.output_root)
+        workspace_root = settings.output_root
         conn = await get_connection(settings.db_path)
         try:
             projects = await repository.list_projects(conn)
@@ -1693,7 +1694,7 @@ async def check_wordcraft_env(project_id: str | None = None) -> dict:
             workspace_root,
             *(Path(entry["output_root"]) for entry in projects if entry.get("output_root")),
         ]:
-            resolved = validate_output_root(candidate)
+            resolved = Path(candidate).expanduser().resolve()
             if resolved not in confinement_roots:
                 confinement_roots.append(resolved)
         cli = wordcraft_bridge.detect_wordcraft_cli()
@@ -1730,6 +1731,7 @@ async def check_wordcraft_env(project_id: str | None = None) -> dict:
                 "roots": [
                     {
                         "root": str(root),
+                        **_describe_root(root),
                         "mcp_command": wordcraft_bridge.build_mcp_command(cli, root),
                     }
                     for root in confinement_roots
@@ -2688,38 +2690,44 @@ def _config_snapshot(settings) -> dict:
     return {
         "output_root": str(settings.output_root),
         "source": settings.output_root_source,
-        "writable": _is_writable(settings.output_root),
+        **_describe_root(settings.output_root),
         "db_path": str(settings.db_path),
         "config_file": str(config_file_path()),
         "legacy_env_present": bool(os.environ.get(LEGACY_OUTPUT_ROOT_ENV)),
     }
 
 
+def _peek_output_root(raw: str) -> Path:
+    """Resolve a path for reporting only: no mkdir, no writability probe."""
+    candidate = Path(raw).expanduser()
+    if not candidate.is_absolute():
+        candidate = Path.cwd() / candidate
+    return candidate.resolve()
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
-    cli_output_root: Path | None = None
-    if args.output_dir:
-        try:
+    try:
+        if args.show_config:
+            peeked = _peek_output_root(args.output_dir) if args.output_dir else None
+            settings = get_settings(cli_output_dir=peeked)
+            print(json.dumps(_config_snapshot(settings), indent=2))
+            return
+
+        cli_output_root: Path | None = None
+        if args.output_dir:
             cli_output_root = validate_output_root(args.output_dir)
-        except ValueError as exc:
-            parser.error(str(exc))
+        set_cli_output_root(cli_output_root)
+        settings = get_settings()
 
-    settings = get_settings(cli_output_dir=cli_output_root)
-
-    if cli_output_root is not None and not args.no_persist:
-        try:
+        if cli_output_root is not None and not args.no_persist:
             persist_output_root(cli_output_root)
-        except ValueError as exc:
-            parser.error(str(exc))
+    except (ConfigError, ValueError, OSError) as exc:
+        parser.error(str(exc))
 
     configure_logging(settings.log_level)
-
-    if args.show_config:
-        print(json.dumps(_config_snapshot(settings), indent=2))
-        return
-
     logging.getLogger(__name__).info(
         "output root: %s (source: %s); db: %s",
         settings.output_root,

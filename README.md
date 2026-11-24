@@ -101,12 +101,22 @@ di folder output. Ada dua tingkat penentuan:
 | :--- | :--- | :--- |
 | `RESEARCH_MCP_OUTPUT_ROOT` | `~/.research-mcp/workspaces` | Folder induk seluruh proyek |
 | `RESEARCH_MCP_WORKSPACE` | *(legacy)* | Nama lama `RESEARCH_MCP_OUTPUT_ROOT`; masih dihormati |
-| `RESEARCH_MCP_DB_PATH` | `~/.research-mcp/research_mcp.db` | Database metadata (tidak ikut pindah saat folder output berubah) |
+| `RESEARCH_MCP_DB_PATH` | `~/.research-mcp/research_mcp.db` | Database metadata |
 | `RESEARCH_MCP_CONFIG_FILE` | `~/.research-mcp/config.toml` | Lokasi file konfigurasi yang ditulis `--output-dir` |
 
-Presedensi: `--output-dir` → `RESEARCH_MCP_OUTPUT_ROOT` → `RESEARCH_MCP_WORKSPACE` →
-`config.toml` → default. Proyek yang dibuat sebelum fitur ini tidak punya folder tersimpan
-sendiri, jadi ia tetap mengikuti default global sampai dipindahkan manual.
+Presedensi folder output: `--output-dir` → `RESEARCH_MCP_OUTPUT_ROOT` →
+`RESEARCH_MCP_WORKSPACE` → `config.toml` → default. `--show-config` hanya melaporkan
+konfigurasi efektif: ia tidak membuat folder dan tidak menulis file.
+
+**Database tidak ikut pindah.** Saat `RESEARCH_MCP_DB_PATH` tidak diset, kandidat dipilih
+secara berurutan dan hanya yang **sudah ada** yang dipakai: database di samping root dari
+`RESEARCH_MCP_WORKSPACE`, lalu `~/.research-mcp/research_mcp.db`, lalu database di samping
+folder output saat ini. Baru kalau tidak ada satu pun, database baru dibuat di lokasi
+default. Ini mencegah proyek "hilang" hanya karena folder output diganti.
+
+`config.toml` boleh memuat key lain; key yang tidak dikenal diabaikan dengan peringatan,
+bukan menggagalkan startup. Proyek yang dibuat sebelum fitur ini tidak punya folder
+tersimpan sendiri, jadi ia tetap mengikuti default global sampai dipindahkan manual.
 
 ### OCR PDF hasil scan
 

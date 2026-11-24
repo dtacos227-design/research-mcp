@@ -32,6 +32,7 @@ async def test_delete_project_works_outside_default_root(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_delete_project_refuses_when_output_root_is_filesystem_root(tmp_path, monkeypatch):
+    monkeypatch.setenv("RESEARCH_MCP_OUTPUT_ROOT", str(tmp_path / "ws"))
     monkeypatch.setenv("RESEARCH_MCP_DB_PATH", str(tmp_path / "db.sqlite"))
     created = await create_project("Rooted")
 
