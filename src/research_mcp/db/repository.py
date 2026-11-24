@@ -36,21 +36,23 @@ async def project_workspace_dir(workspace_root: Path, slug: str) -> Path:
 
 async def create_project(
     conn: aiosqlite.Connection,
-    workspace_root: Path,
+    output_root: Path,
     name: str,
     description: str = "",
 ) -> ProjectModel:
     base_slug = _slugify(name)
     now = datetime.now(UTC).isoformat()
     project_id = uuid.uuid4().hex
+    root = output_root.expanduser().resolve()
 
     slug = base_slug
     for suffix in itertools.count(2):
         try:
             await conn.execute(
-                "INSERT INTO projects (id, slug, name, description, created_at, updated_at)"
-                " VALUES (?, ?, ?, ?, ?, ?)",
-                (project_id, slug, name, description, now, now),
+                "INSERT INTO projects"
+                " (id, slug, name, description, output_root, created_at, updated_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (project_id, slug, name, description, str(root), now, now),
             )
             break
         except sqlite3.IntegrityError:
@@ -59,7 +61,7 @@ async def create_project(
     # Row is inserted but uncommitted: create folders for the final slug, and
     # roll back if that fails so no project exists without its workspace.
     try:
-        project_dir = await project_workspace_dir(workspace_root, slug)
+        project_dir = await project_workspace_dir(root, slug)
         project_dir.mkdir(parents=True, exist_ok=True)
         for sub in WORKSPACE_SUBDIRS:
             (project_dir / sub).mkdir(parents=True, exist_ok=True)
@@ -73,6 +75,7 @@ async def create_project(
         slug=slug,
         name=name,
         description=description,
+        output_root=str(root),
         created_at=now,
         updated_at=now,
     )
@@ -80,7 +83,7 @@ async def create_project(
 
 async def get_project(conn: aiosqlite.Connection, project_id: str) -> ProjectModel:
     async with conn.execute(
-        "SELECT id, slug, name, description, style_id, created_at, updated_at"
+        "SELECT id, slug, name, description, style_id, output_root, created_at, updated_at"
         " FROM projects WHERE id = ?",
         (project_id,),
     ) as cursor:
@@ -95,8 +98,9 @@ async def get_project(conn: aiosqlite.Connection, project_id: str) -> ProjectMod
         name=row[2],
         description=row[3] or "",
         style_id=row[4],
-        created_at=row[5],
-        updated_at=row[6],
+        output_root=row[5],
+        created_at=row[6],
+        updated_at=row[7],
     )
 
 
@@ -150,7 +154,8 @@ async def list_projects(conn: aiosqlite.Connection) -> list[dict]:
     # product cannot inflate either count.
     async with conn.execute(
         """
-        SELECT p.id, p.slug, p.name, p.description, p.style_id, p.created_at, p.updated_at,
+        SELECT p.id, p.slug, p.name, p.description, p.style_id, p.output_root,
+               p.created_at, p.updated_at,
                (SELECT COUNT(*) FROM papers WHERE project_id = p.id) AS paper_count,
                (SELECT COUNT(*) FROM draft_sections WHERE project_id = p.id) AS draft_count
         FROM projects p
@@ -166,11 +171,12 @@ async def list_projects(conn: aiosqlite.Connection) -> list[dict]:
                 name=r[2],
                 description=r[3] or "",
                 style_id=r[4],
-                created_at=r[5],
-                updated_at=r[6],
+                output_root=r[5],
+                created_at=r[6],
+                updated_at=r[7],
             ).model_dump(),
-            "paper_count": r[7],
-            "draft_count": r[8],
+            "paper_count": r[8],
+            "draft_count": r[9],
         }
         for r in rows
     ]

@@ -75,3 +75,15 @@ async def test_list_projects_counts_papers_and_drafts_without_cross_product(tmp_
     projects = await list_projects(conn)
     assert projects[0]["paper_count"] == 2
     assert projects[0]["draft_count"] == 3
+
+
+@pytest.mark.asyncio
+async def test_create_project_stores_output_root_and_builds_subdirs(tmp_path, conn):
+    root = tmp_path / "custom" / "out"
+    project = await create_project(conn, root, "My Research")
+    assert project.output_root == str(root.resolve())
+    for sub in ("pdfs", "parsed", "drafts", "assets", "scripts", "exports"):
+        assert (root / project.slug / sub).is_dir()
+
+    reloaded = await get_project(conn, project.id)
+    assert reloaded.output_root == project.output_root

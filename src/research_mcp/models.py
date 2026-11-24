@@ -9,6 +9,7 @@ class ProjectModel(BaseModel):
     name: str
     description: str = ""
     style_id: str | None = None
+    output_root: str | None = None
     created_at: str
     updated_at: str
 

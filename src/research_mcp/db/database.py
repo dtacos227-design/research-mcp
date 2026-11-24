@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS projects (
     description TEXT,
     style_id TEXT,
     brief_json TEXT,
+    output_root TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -122,6 +123,7 @@ async def _migrate_legacy_schema(conn: aiosqlite.Connection) -> None:
         {
             "style_id": "TEXT",
             "brief_json": "TEXT",
+            "output_root": "TEXT",
         },
     )
     await conn.commit()

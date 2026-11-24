@@ -127,3 +127,33 @@ async def test_fts5_stays_in_sync_with_paper_sections(tmp_path):
         assert await cursor.fetchall() == []
     finally:
         await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_projects_table_has_output_root_column(tmp_path):
+    conn = await get_connection(tmp_path / "db.sqlite")
+    try:
+        cursor = await conn.execute("PRAGMA table_info(projects)")
+        assert "output_root" in {row[1] for row in await cursor.fetchall()}
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_legacy_projects_table_gets_output_root_column(tmp_path):
+    db_path = tmp_path / "legacy.sqlite"
+    raw = await aiosqlite.connect(db_path)
+    await raw.execute(
+        "CREATE TABLE projects (id TEXT PRIMARY KEY, slug TEXT UNIQUE NOT NULL,"
+        " name TEXT NOT NULL, description TEXT, created_at TEXT NOT NULL,"
+        " updated_at TEXT NOT NULL)"
+    )
+    await raw.commit()
+    await raw.close()
+
+    conn = await get_connection(db_path)
+    try:
+        cursor = await conn.execute("PRAGMA table_info(projects)")
+        assert "output_root" in {row[1] for row in await cursor.fetchall()}
+    finally:
+        await conn.close()
