@@ -131,18 +131,24 @@ async def get_project_status(project_id: str) -> dict:
             project = await repository.get_project(conn, project_id)
         except repository.ProjectNotFoundError as exc:
             raise ToolError(str(exc)) from exc
-        workspace = settings.workspace_dir / project.slug
+        workspace = _project_dir(settings, project)
         async with conn.execute(
             "SELECT citekey FROM papers WHERE project_id = ?", (project_id,)
         ) as cursor:
             citekeys = [row[0] for row in await cursor.fetchall()]
+
+        def _names(subdir: str) -> list[str]:
+            folder = workspace / subdir
+            return sorted(path.name for path in folder.glob("*")) if folder.is_dir() else []
+
         return {
             **project.model_dump(),
             "workspace_path": str(workspace),
+            "output_root": str(_project_output_root(settings, project)),
             "citekeys": citekeys,
-            "draft_filenames": sorted(p.name for p in (workspace / "drafts").glob("*")),
-            "chart_filenames": sorted(p.name for p in (workspace / "assets").glob("*")),
-            "export_filenames": sorted(p.name for p in (workspace / "exports").glob("*")),
+            "draft_filenames": _names("drafts"),
+            "chart_filenames": _names("assets"),
+            "export_filenames": _names("exports"),
         }
     finally:
         await conn.close()
@@ -486,11 +492,11 @@ async def save_paper_to_project(
         settings = get_settings()
         conn = await get_connection(settings.db_path)
         try:
-            await repository.get_project(conn, project_id)
+            project = await _get_project_or_raise(conn, project_id)
             return await ingest_remote_paper(
                 conn,
                 project_id,
-                settings.workspace_dir,
+                _project_output_root(settings, project),
                 identifier,
                 download_pdf,
             )
@@ -516,11 +522,11 @@ async def import_local_pdf(
         settings = get_settings()
         conn = await get_connection(settings.db_path)
         try:
-            await repository.get_project(conn, project_id)
+            project = await _get_project_or_raise(conn, project_id)
             return await ingest_local_pdf(
                 conn,
                 project_id,
-                settings.workspace_dir,
+                _project_output_root(settings, project),
                 Path(file_path).expanduser(),
                 doi,
             )
@@ -789,10 +795,18 @@ async def delete_project(project_id: str, confirm: str) -> dict:
                     f"Refusing to delete project {project_id!r}: pass confirm={project.slug!r} "
                     "(the project slug) to confirm."
                 )
-            project_dir = (settings.workspace_dir / project.slug).resolve()
-            workspace_root = settings.workspace_dir.resolve()
-            if project_dir == workspace_root or not project_dir.is_relative_to(workspace_root):
-                raise ToolError("Refusing to delete a workspace outside RESEARCH_MCP_WORKSPACE.")
+            project_root = _project_output_root(settings, project).resolve()
+            project_dir = _project_dir(settings, project).resolve()
+            if project_root == Path(project_root.anchor):
+                raise ToolError(
+                    "Refusing to delete: the project output root is the filesystem root."
+                )
+            if (
+                project_dir == project_root
+                or project_dir.parent != project_root
+                or not project_dir.is_relative_to(project_root)
+            ):
+                raise ToolError("Refusing to delete a project directory outside its output root.")
         finally:
             await conn.close()
 
@@ -870,8 +884,13 @@ async def generate_chart(
 _VALID_BIB_FORMATS = {"bibtex", "csl_json"}
 
 
+def _project_output_root(settings, project: object) -> Path:
+    stored = getattr(project, "output_root", None)
+    return Path(stored) if stored else settings.output_root
+
+
 def _project_dir(settings, project: object) -> Path:
-    return settings.workspace_dir / project.slug
+    return _project_output_root(settings, project) / project.slug
 
 
 def _write_file(path: Path, project_dir: Path, text: str) -> None:
@@ -2477,7 +2496,7 @@ async def resource_bibliography(project_id: str) -> str:
             )
     finally:
         await conn.close()
-    bib_path = settings.workspace_dir / project.slug / "references.bib"
+    bib_path = _project_dir(settings, project) / "references.bib"
     if not bib_path.exists():
         return (
             "Bibliography not yet generated for this project. "
@@ -2504,7 +2523,7 @@ async def resource_csl_json(project_id: str) -> str:
             )
     finally:
         await conn.close()
-    csl_path = settings.workspace_dir / project.slug / "references.csl.json"
+    csl_path = _project_dir(settings, project) / "references.csl.json"
     if not csl_path.exists():
         return (
             "CSL-JSON bibliography not yet generated for this project. "
