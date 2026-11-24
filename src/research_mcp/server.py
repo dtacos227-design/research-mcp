@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import re
 import shutil
 from pathlib import Path
@@ -11,7 +12,13 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from research_mcp.citations.bibtex import build_bibtex_entry, build_csl_entry
 from research_mcp.citations.verifier import diff_citations, extract_citekeys
-from research_mcp.config import configure_logging, get_settings
+from research_mcp.config import (
+    LEGACY_OUTPUT_ROOT_ENV,
+    config_file_path,
+    configure_logging,
+    get_settings,
+    validate_output_root,
+)
 from research_mcp.db import repository
 from research_mcp.db.database import get_connection
 from research_mcp.exporters import latex_engine, wordcraft_bridge
@@ -88,16 +95,20 @@ def _truncate_abstract(abstract: str | None) -> str | None:
 
 
 @mcp.tool()
-async def create_project(name: str, description: str = "") -> dict:
-    """Create a research project and its isolated workspace directories."""
+async def create_project(name: str, description: str = "", output_dir: str | None = None) -> dict:
+    """Create a research project and its isolated workspace directories.
+
+    `output_dir` is the folder that will hold this project's own folder
+    (`<output_dir>/<slug>`). It defaults to the configured output root, and the
+    choice is stored with the project so later root changes do not move it.
+    """
     try:
         settings = get_settings()
+        root = validate_output_root(output_dir) if output_dir else settings.output_root
         conn = await get_connection(settings.db_path)
         try:
-            project = await repository.create_project(
-                conn, settings.workspace_dir, name, description
-            )
-            return project.model_dump()
+            project = await repository.create_project(conn, root, name, description)
+            return {**project.model_dump(), "project_dir": str(_project_dir(settings, project))}
         finally:
             await conn.close()
     except ToolError:
@@ -108,13 +119,54 @@ async def create_project(name: str, description: str = "") -> dict:
 
 @mcp.tool()
 async def list_projects() -> list[dict]:
-    """List all projects with their paper and draft section counts."""
+    """List all projects with their paper and draft section counts plus paths."""
     try:
-        conn = await get_connection(get_settings().db_path)
+        settings = get_settings()
+        conn = await get_connection(settings.db_path)
         try:
-            return await repository.list_projects(conn)
+            projects = await repository.list_projects(conn)
         finally:
             await conn.close()
+        return [
+            {
+                **entry,
+                "output_root": str(
+                    Path(entry["output_root"]) if entry.get("output_root") else settings.output_root
+                ),
+                "project_dir": str(
+                    _project_dir_for(settings, entry["slug"], entry.get("output_root"))
+                ),
+            }
+            for entry in projects
+        ]
+    except ToolError:
+        raise
+    except Exception as exc:
+        raise ToolError(f"{type(exc).__name__}: {exc}") from exc
+
+
+def _is_writable(root: Path) -> bool:
+    """True when `root` can be created or written; missing folders inherit their parent."""
+    probe = root
+    while not probe.exists() and probe != probe.parent:
+        probe = probe.parent
+    return os.access(probe, os.W_OK)
+
+
+@mcp.tool()
+async def get_output_config() -> dict:
+    """Report where research output goes, why, and whether it is usable."""
+    try:
+        settings = get_settings()
+        root = settings.output_root
+        return {
+            "output_root": str(root),
+            "source": settings.output_root_source,
+            "writable": _is_writable(root),
+            "db_path": str(settings.db_path),
+            "config_file": str(config_file_path()),
+            "legacy_env_present": bool(os.environ.get(LEGACY_OUTPUT_ROOT_ENV)),
+        }
     except ToolError:
         raise
     except Exception as exc:
@@ -889,8 +941,13 @@ def _project_output_root(settings, project: object) -> Path:
     return Path(stored) if stored else settings.output_root
 
 
+def _project_dir_for(settings, slug: str, output_root: str | None) -> Path:
+    root = Path(output_root) if output_root else settings.output_root
+    return root / slug
+
+
 def _project_dir(settings, project: object) -> Path:
-    return _project_output_root(settings, project) / project.slug
+    return _project_dir_for(settings, project.slug, getattr(project, "output_root", None))
 
 
 def _write_file(path: Path, project_dir: Path, text: str) -> None:
