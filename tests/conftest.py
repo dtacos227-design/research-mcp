@@ -30,3 +30,15 @@ def _empty_search_cache():
     clear_search_cache()
     yield
     clear_search_cache()
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_config_file(tmp_path, monkeypatch):
+    """Never read or write the developer's own ``~/.research-mcp/config.toml``.
+
+    A test that wants a config file writes one at ``config_file_path()`` and the
+    existing fixtures still win when they set ``RESEARCH_MCP_WORKSPACE``.
+    """
+    monkeypatch.setenv("RESEARCH_MCP_CONFIG_FILE", str(tmp_path / "config.toml"))
+    monkeypatch.delenv("RESEARCH_MCP_OUTPUT_ROOT", raising=False)
+    monkeypatch.delenv("RESEARCH_MCP_WORKSPACE", raising=False)

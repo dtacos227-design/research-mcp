@@ -1,15 +1,17 @@
 import aiosqlite
 import pytest
+from pathlib import Path
 
 from research_mcp.config import Settings
 from research_mcp.db import repository
 from research_mcp.db.database import get_connection
 
 
-def test_db_path_defaults_next_to_workspace_dir(monkeypatch):
-    monkeypatch.delenv("RESEARCH_MCP_WORKSPACE", raising=False)
+def test_db_path_default_is_fixed_not_derived_from_output_root(monkeypatch, tmp_path):
+    monkeypatch.setenv("RESEARCH_MCP_OUTPUT_ROOT", str(tmp_path / "anywhere" / "workspaces"))
+    monkeypatch.delenv("RESEARCH_MCP_DB_PATH", raising=False)
     settings = Settings()
-    assert settings.db_path == settings.workspace_dir.parent / "research_mcp.db"
+    assert settings.db_path == (Path.home() / ".research-mcp" / "research_mcp.db").resolve()
     assert settings.db_path.is_absolute()
 
 

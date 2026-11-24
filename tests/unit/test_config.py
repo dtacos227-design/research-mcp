@@ -5,29 +5,48 @@ from pathlib import Path
 from research_mcp.config import Settings, configure_logging, get_settings
 
 
-def test_default_workspace_dir_is_home_research_mcp_workspaces(monkeypatch):
+def test_default_output_root(monkeypatch):
     monkeypatch.delenv("RESEARCH_MCP_WORKSPACE", raising=False)
     settings = Settings()
-    assert settings.workspace_dir == Path.home() / ".research-mcp" / "workspaces"
+    assert settings.output_root == (Path.home() / ".research-mcp" / "workspaces").resolve()
 
 
-def test_workspace_dir_override_from_env_is_resolved_absolute(monkeypatch, tmp_path):
+def test_default_output_root_source_is_default():
+    assert Settings().output_root_source == "default"
+
+
+def test_output_root_override_from_env_is_resolved_absolute(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("RESEARCH_MCP_WORKSPACE", "relative/workspace")
+    monkeypatch.setenv("RESEARCH_MCP_OUTPUT_ROOT", "relative/workspace")
     settings = Settings()
-    assert settings.workspace_dir.is_absolute()
-    assert settings.workspace_dir == (tmp_path / "relative/workspace").resolve()
+    assert settings.output_root.is_absolute()
+    assert settings.output_root == (tmp_path / "relative/workspace").resolve()
+    assert settings.workspace_dir == settings.output_root
+    assert settings.output_root_source == "env"
 
 
-def test_db_path_follows_a_relocated_workspace_dir(monkeypatch, tmp_path):
-    monkeypatch.setenv("RESEARCH_MCP_WORKSPACE", str(tmp_path / "custom" / "workspaces"))
+def test_legacy_workspace_env_is_still_honored(monkeypatch, tmp_path):
+    monkeypatch.setenv("RESEARCH_MCP_WORKSPACE", str(tmp_path / "legacy" / "workspaces"))
+    settings = Settings()
+    assert settings.output_root == (tmp_path / "legacy" / "workspaces").resolve()
+    assert settings.output_root_source == "env-legacy"
+
+
+def test_new_output_root_env_beats_legacy_workspace_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("RESEARCH_MCP_WORKSPACE", str(tmp_path / "legacy"))
+    monkeypatch.setenv("RESEARCH_MCP_OUTPUT_ROOT", str(tmp_path / "new"))
+    assert Settings().output_root == (tmp_path / "new").resolve()
+
+
+def test_db_path_does_not_follow_a_relocated_output_root(monkeypatch, tmp_path):
+    monkeypatch.setenv("RESEARCH_MCP_OUTPUT_ROOT", str(tmp_path / "custom" / "output"))
     monkeypatch.delenv("RESEARCH_MCP_DB_PATH", raising=False)
     settings = Settings()
-    assert settings.db_path == (tmp_path / "custom" / "research_mcp.db").resolve()
+    assert settings.db_path == (Path.home() / ".research-mcp" / "research_mcp.db").resolve()
 
 
-def test_db_path_explicit_override_wins_over_relocated_workspace_dir(monkeypatch, tmp_path):
-    monkeypatch.setenv("RESEARCH_MCP_WORKSPACE", str(tmp_path / "custom" / "workspaces"))
+def test_db_path_explicit_override_wins(monkeypatch, tmp_path):
+    monkeypatch.setenv("RESEARCH_MCP_OUTPUT_ROOT", str(tmp_path / "custom" / "workspaces"))
     monkeypatch.setenv("RESEARCH_MCP_DB_PATH", str(tmp_path / "elsewhere" / "db.sqlite"))
     settings = Settings()
     assert settings.db_path == (tmp_path / "elsewhere" / "db.sqlite").resolve()
