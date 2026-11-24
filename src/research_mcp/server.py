@@ -1682,8 +1682,20 @@ async def check_wordcraft_env(project_id: str | None = None) -> dict:
     """
     try:
         settings = get_settings()
-        workspace_root = settings.workspace_dir
-        workspace_root.mkdir(parents=True, exist_ok=True)
+        workspace_root = validate_output_root(settings.output_root)
+        conn = await get_connection(settings.db_path)
+        try:
+            projects = await repository.list_projects(conn)
+        finally:
+            await conn.close()
+        confinement_roots: list[Path] = []
+        for candidate in [
+            workspace_root,
+            *(Path(entry["output_root"]) for entry in projects if entry.get("output_root")),
+        ]:
+            resolved = validate_output_root(candidate)
+            if resolved not in confinement_roots:
+                confinement_roots.append(resolved)
         cli = wordcraft_bridge.detect_wordcraft_cli()
         desktop = wordcraft_bridge.detect_wordcraft_desktop()
         key_path = wordcraft_bridge.control_key_path()
@@ -1715,6 +1727,13 @@ async def check_wordcraft_env(project_id: str | None = None) -> dict:
                 "read_root": str(workspace_root),
                 "write_root": str(workspace_root),
                 "mcp_command": wordcraft_bridge.build_mcp_command(cli, workspace_root),
+                "roots": [
+                    {
+                        "root": str(root),
+                        "mcp_command": wordcraft_bridge.build_mcp_command(cli, root),
+                    }
+                    for root in confinement_roots
+                ],
             },
             "fallback": {
                 "pandoc": _binary_path(detect_pandoc),
@@ -1736,7 +1755,7 @@ async def check_wordcraft_env(project_id: str | None = None) -> dict:
             report["project"] = {
                 "id": project.id,
                 "slug": project.slug,
-                "workspace_dir": str(workspace_root / project.slug),
+                "workspace_dir": str(_project_dir(settings, project)),
                 "draft_chapters": [chapter["filename"] for chapter in chapters],
                 "papers": len(papers),
             }
@@ -2005,6 +2024,13 @@ def _wordcraft_recommendations(report: dict) -> list[str]:
         items.append(
             "Use the headless WordCraft MCP server with both roots: "
             + " ".join(roots["mcp_command"])
+        )
+    if len(roots.get("roots", [])) > 1:
+        items.append(
+            "Several output roots are configured, and WordCraft accepts one pair of "
+            "automation roots per process: run one WordCraft MCP instance per root "
+            "(see confinement.roots) rather than a shared ancestor, which would undo "
+            "the confinement."
         )
     if not cli["found"]:
         if report["desktop_app"]["found"]:

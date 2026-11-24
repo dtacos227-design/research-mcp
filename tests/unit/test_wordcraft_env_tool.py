@@ -67,3 +67,38 @@ async def test_env_report_unknown_project_raises(workspace, monkeypatch):
     monkeypatch.setattr(wb, "control_key_path", lambda *a, **k: workspace / "missing-key")
     with pytest.raises(ToolError, match="not found"):
         await server.check_wordcraft_env("does-not-exist")
+
+
+@pytest.mark.asyncio
+async def test_confinement_lists_every_project_root(workspace, monkeypatch):
+    monkeypatch.setattr(wb, "detect_wordcraft_cli", lambda *a, **k: None)
+    monkeypatch.setattr(wb, "probe_port", lambda *a, **k: False)
+    monkeypatch.setattr(wb, "control_key_path", lambda *a, **k: workspace / "missing-key")
+
+    await server.create_project("A")
+    await server.create_project("B", output_dir=str(workspace / "elsewhere"))
+
+    report = await server.check_wordcraft_env()
+
+    listed = {entry["root"] for entry in report["confinement"]["roots"]}
+    assert listed == {
+        str((workspace / "ws").resolve()),
+        str((workspace / "elsewhere").resolve()),
+    }
+    assert report["confinement"]["read_root"] == str((workspace / "ws").resolve())
+    for entry in report["confinement"]["roots"]:
+        assert entry["mcp_command"][0] == "wordcraft-cli"
+        assert entry["mcp_command"][-1] == entry["root"]
+
+
+@pytest.mark.asyncio
+async def test_multiple_roots_recommend_one_instance_per_root(workspace, monkeypatch):
+    monkeypatch.setattr(wb, "detect_wordcraft_cli", lambda *a, **k: None)
+    monkeypatch.setattr(wb, "probe_port", lambda *a, **k: False)
+    monkeypatch.setattr(wb, "control_key_path", lambda *a, **k: workspace / "missing-key")
+
+    await server.create_project("A", output_dir=str(workspace / "elsewhere"))
+
+    report = await server.check_wordcraft_env()
+
+    assert any("per root" in item for item in report["recommendations"])
