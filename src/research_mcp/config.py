@@ -66,6 +66,35 @@ def persist_output_root(path: Path) -> None:
     target.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def validate_output_root(raw: str | Path) -> Path:
+    """Resolve a user-supplied output folder, creating it when missing.
+
+    Raises `ValueError` rather than returning a path the caller would only fail
+    on later: a filesystem root (which would make `rmtree` catastrophic), an
+    existing non-directory, or a folder this process cannot write to.
+    """
+    candidate = Path(raw).expanduser()
+    if not candidate.is_absolute():
+        candidate = Path.cwd() / candidate
+    resolved = candidate.resolve()
+
+    if resolved == Path(resolved.anchor):
+        raise ValueError(f"{resolved} is the filesystem root, which is not allowed.")
+    if resolved.exists() and not resolved.is_dir():
+        raise ValueError(f"{resolved} exists and is not a directory.")
+    try:
+        resolved.mkdir(parents=True, exist_ok=True)
+    except NotADirectoryError as exc:
+        raise ValueError(
+            f"{resolved} cannot be created because a parent path is not a directory."
+        ) from exc
+    except OSError as exc:
+        raise ValueError(f"{resolved} cannot be created: {exc}") from exc
+    if not os.access(resolved, os.W_OK):
+        raise ValueError(f"{resolved} is not writable by this process.")
+    return resolved
+
+
 class _MappedTomlSource(TomlConfigSettingsSource):
     """TOML keys use field names; validation uses each field's env alias."""
 
