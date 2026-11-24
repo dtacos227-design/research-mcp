@@ -75,6 +75,39 @@ uv run research-mcp
 
 Kompatibel dengan **Claude Code**, **OpenCode**, **Codex**, dan **Agy**.
 
+### Folder output riset
+
+Semua hasil (PDF jurnal, Markdown parsed, draf, sitasi, dan dokumen ekspor) disimpan
+di folder output. Ada dua tingkat penentuan:
+
+1. **Default global**, ditentukan saat server dijalankan:
+
+   ```bash
+   uv run research-mcp --output-dir ~/Riset        # disimpan ke ~/.research-mcp/config.toml
+   uv run research-mcp --output-dir ~/Riset --no-persist   # sesi ini saja
+   uv run research-mcp --show-config               # lihat konfigurasi efektif lalu keluar
+   ```
+
+2. **Per proyek**, lewat tool `create_project(..., output_dir="~/Kerja/Klien-X")`. Pilihan
+   ini disimpan bersama proyek, jadi mengubah default global tidak memindahkan proyek yang
+   sudah ada.
+
+`output_dir` adalah **folder induk**: setiap proyek mendapat subfolder sendiri
+(`<output_dir>/<slug>/`) berisi `pdfs/`, `parsed/`, `drafts/`, `assets/`, `scripts/`, dan
+`exports/`. Untuk melihat ke mana hasil akan masuk beserta asal nilainya
+(`cli`/`env`/`env-legacy`/`config`/`default`), panggil tool `get_output_config()`.
+
+| Env var | Default | Arti |
+| :--- | :--- | :--- |
+| `RESEARCH_MCP_OUTPUT_ROOT` | `~/.research-mcp/workspaces` | Folder induk seluruh proyek |
+| `RESEARCH_MCP_WORKSPACE` | *(legacy)* | Nama lama `RESEARCH_MCP_OUTPUT_ROOT`; masih dihormati |
+| `RESEARCH_MCP_DB_PATH` | `~/.research-mcp/research_mcp.db` | Database metadata (tidak ikut pindah saat folder output berubah) |
+| `RESEARCH_MCP_CONFIG_FILE` | `~/.research-mcp/config.toml` | Lokasi file konfigurasi yang ditulis `--output-dir` |
+
+Presedensi: `--output-dir` → `RESEARCH_MCP_OUTPUT_ROOT` → `RESEARCH_MCP_WORKSPACE` →
+`config.toml` → default. Proyek yang dibuat sebelum fitur ini tidak punya folder tersimpan
+sendiri, jadi ia tetap mengikuti default global sampai dipindahkan manual.
+
 ### OCR PDF hasil scan
 
 `uv sync` sudah memasang **RapidOCR** (model ONNX PP-OCRv6 ikut di dalam wheel), jadi

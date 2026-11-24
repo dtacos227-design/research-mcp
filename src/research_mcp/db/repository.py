@@ -30,10 +30,6 @@ def _slugify(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "project"
 
 
-async def project_workspace_dir(workspace_root: Path, slug: str) -> Path:
-    return workspace_root / slug
-
-
 async def create_project(
     conn: aiosqlite.Connection,
     output_root: Path,
@@ -61,7 +57,7 @@ async def create_project(
     # Row is inserted but uncommitted: create folders for the final slug, and
     # roll back if that fails so no project exists without its workspace.
     try:
-        project_dir = await project_workspace_dir(root, slug)
+        project_dir = root / slug
         project_dir.mkdir(parents=True, exist_ok=True)
         for sub in WORKSPACE_SUBDIRS:
             (project_dir / sub).mkdir(parents=True, exist_ok=True)
